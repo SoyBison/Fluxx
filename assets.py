@@ -2,7 +2,8 @@
 keepers = ['Sleep', 'Money', 'Time', 'Music', 'Sun', 'Toaster', 'Eye', 'Brain', 'Moon',
            'Love', 'Peace', 'Rocket', 'Television', 'Milk', 'Cookies', 'Chocolate', 'Dreams', 'Party', 'Bread']
 
-goals ={'Milk & Cookies': ('Milk', 'Cookies'),
+goals = {
+        'Milk & Cookies': ('Milk', 'Cookies'),
         'Party Snacks': ('Party', '@anyfood'),
         'Night & Day': ('Sun', 'Moon'),
         'Turn Up Volume': ('Music', 'Party'),
@@ -20,9 +21,9 @@ goals ={'Milk & Cookies': ('Milk', 'Cookies'),
         'Time is Money': ('Time', 'Money'),
         'Bread & Chocolate': ('Bread', 'Chocolate'),
         'Party Time': ('Party', 'Time'),
-        'Five Keepers': ('@fivekeepers'),
+        'Five Keepers': ('@fivekeepers',),
         'The Brain (No TV)': ('Brain', '@notv'),
-        'Ten Cards in Hand': ('@tencards'),
+        'Ten Cards in Hand': ('@tencards',),
         'Bed Time': ('Sleep', 'Time'),
         'Cant Buy Me Love': ('Money', 'Love'),
         'Hearts & Minds': ('Love', 'Brain'),

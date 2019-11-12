@@ -1,3 +1,5 @@
+from typing import Iterator, _T_co, _T
+
 from numba import jit, jit_module, jitclass
 from abc import ABC, abstractmethod
 import random
@@ -36,6 +38,11 @@ class Board:
         def __init__(self, *args, **kwargs):
             super(Board.TooManyCardsPlayed, self).__init__(*args, *kwargs)
 
+    def check_goal(self):
+        if self.goals:
+            for goal in self.goals:
+                pass
+
 
 class Card:
     def __init__(self, board, name):
@@ -61,6 +68,7 @@ class Card:
     def play(self):
         self.do()
         self.board.inc_cards_played()
+        self.board.check_goal()
 
     def __hash__(self):
         return hash(self.name + repr(self.board))
@@ -98,7 +106,27 @@ class Deck(Sequence):
         return len(self.values)
 
 
-class Hand(set):
+class Hand(MutableSet):
+
+    def add(self, x: _T) -> None:
+        if isinstance(x, Card):
+            self.cards.add(x)
+        else:
+            raise TypeError('A hand can only contain cards.')
+
+    def discard(self, x: _T) -> None:
+        self.cards.discard(x)
+        x.play()
+
+    def __contains__(self, x: object) -> bool:
+        if isinstance(x, Card):
+            return x.name in {y.name for y in self.cards}
+
+    def __len__(self) -> int:
+        return len(self.cards)
+
+    def __iter__(self) -> Iterator[_T_co]:
+        return iter(self.cards)
 
     def __init__(self, player_num):
         super(Hand, self).__init__()
@@ -106,9 +134,50 @@ class Hand(set):
         self.cards = set()
 
 
-class Keep(set):
+class Card_Space(MutableSet):
+    def add(self, x: _T) -> None:
+        if isinstance(x, self.kind):
+            self.cards.add(x)
+        else:
+            raise TypeError('A hand can only contain cards.')
+
+    def discard(self, x: _T) -> None:
+        self.cards.discard(x)
+        x.play()
+
+    def __contains__(self, x: object) -> bool:
+        if isinstance(x, self.kind):
+            return x.name in {y.name for y in self.cards}
+        if isinstance(x, str): # In Fluxx, Card Names are unique identifiers.
+            return x in {y.name for y in self.cards}
+
+    def __len__(self) -> int:
+        return len(self.cards)
+
+    def __iter__(self) -> Iterator[_T_co]:
+        return iter(self.cards)
+
+    def __init__(self, kind):
+        super(Card_Space, self).__init__()
+        self.cards = set()
+        assert issubclass(kind, Card)
+        self.kind = kind
+
+
+class Keep(Card_Space):
 
     def __init__(self, player_num):
-        super(Keep, self).__init__()
+        super(Keep, self).__init__(Keeper)
         self.player_num = player_num
         self.cards = set()
+
+
+class Goal_Space(Card_Space):
+
+    def __init__(self):
+        super(Goal_Space, self).__init__(Goal)
+        self.cards = set()
+
+
+class Goal(Card):
+    pass
