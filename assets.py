@@ -1,10 +1,20 @@
+"""
+The point of defining the Assets folder as seperate from the objects folder is to make it easy to add new assets to the
+game, especially those which have their own behavior. You'll notice I didn't include CREEPERs in the game, because they
+are considered an auxiliary mechanic by most players. Every card-code in this file which has an underscore before it
+refers to a card which has special behavior within its class. This behavior is recorded in subclasses for their type.
+The foodlist is stored here, too.
+"""
 
-keepers = ['Sleep', 'Money', 'Time', 'Music', 'Sun', 'Toaster', 'Eye', 'Brain', 'Moon',
-           'Love', 'Peace', 'Rocket', 'Television', 'Milk', 'Cookies', 'Chocolate', 'Dreams', 'Party', 'Bread']
+
+keepers = {'Sleep', 'Money', 'Time', 'Music', 'Sun', 'Toaster', 'Eye', 'Brain', 'Moon',
+           'Love', 'Peace', 'Rocket', 'Television', 'Milk', 'Cookies', 'Chocolate', 'Dreams', 'Party', 'Bread'}
+
+foods = {'Milk', 'Cookies', 'Chocolate', 'Bread'}
 
 goals = {
         'Milk & Cookies': ('Milk', 'Cookies'),
-        'Party Snacks': ('Party', '@anyfood'),
+        'Party Snacks': ('Party', '_anyfood'),
         'Night & Day': ('Sun', 'Moon'),
         'Turn Up Volume': ('Music', 'Party'),
         'Great Theme Song': ('Music', 'Television'),
@@ -21,9 +31,9 @@ goals = {
         'Time is Money': ('Time', 'Money'),
         'Bread & Chocolate': ('Bread', 'Chocolate'),
         'Party Time': ('Party', 'Time'),
-        'Five Keepers': ('@fivekeepers',),
-        'The Brain (No TV)': ('Brain', '@notv'),
-        'Ten Cards in Hand': ('@tencards',),
+        'Five Keepers': ('_fivekeepers',),
+        'The Brain (No TV)': ('Brain', '_notv'),
+        'Ten Cards in Hand': ('_tencards',),
         'Bed Time': ('Sleep', 'Time'),
         'Cant Buy Me Love': ('Money', 'Love'),
         'Hearts & Minds': ('Love', 'Brain'),
@@ -34,3 +44,6 @@ goals = {
         'Hippyism': ('Peace', 'Love'),
         'Lullaby': ('Sleep', 'Music')
         }
+
+# We use _ to denote exotic goals because there's only conventional meaning for it in python,
+# so I can call a function _func in objects.py.

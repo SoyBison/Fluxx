@@ -1,5 +1,5 @@
 from typing import Iterator, _T_co, _T
-
+from assets import *
 from numba import jit, jit_module, jitclass
 from abc import ABC, abstractmethod
 import random
@@ -18,7 +18,7 @@ class Board:
         self.player_state = 0
         self.cards_played = 0
         self.cards_drawn = 0
-        self.goals = []
+        self.goals = Goal_Space()
 
     def inc_cards_played(self):
         self.cards_played += 1
@@ -35,13 +35,19 @@ class Board:
         self.player_state = self.turn_num % self.num_players
 
     class TooManyCardsPlayed(Exception):
-        def __init__(self, *args, **kwargs):
-            super(Board.TooManyCardsPlayed, self).__init__(*args, *kwargs)
+        def __init__(self, *args):
+            super(Board.TooManyCardsPlayed, self).__init__(*args)
 
     def check_goal(self):
         if self.goals:
             for goal in self.goals:
-                pass
+                winner = goal.evaluate()
+                if winner:
+                    raise self.Win(f'Player {winner}')
+
+    class Win(Exception):
+        def __init__(self, *args):
+            super(Board.Win, self).__init__(*args)
 
 
 class Card:
@@ -180,4 +186,75 @@ class Goal_Space(Card_Space):
 
 
 class Goal(Card):
-    pass
+
+    def do(self):
+        self.board.goals.add(self)
+
+    def __init__(self, board, tag):
+        """
+        tag should be stored as an 'item' call from a dict.items().
+        :param board: Board
+        :param tag: tuple
+        """
+        name, reqs = tag
+        super(Goal, self).__init__(board, name)
+        self._reqs = reqs
+
+    @property
+    def reqs(self):
+        return self._reqs
+
+    @property
+    def evaluate(self):
+        for player_num in range(self.board.num_players):
+            quals = []
+            for req in self.reqs:  # This should pick a function based on the requirements.
+                if req[0] == '_':
+                    quals.append(self.exotic_check(player_num, req))
+                else:
+                    quals.append(self.normal_check(req, player_num))
+            if all(quals):
+                return player_num
+        return None
+
+    def normal_check(self, req, player_num):
+        keep = self.board.keeps[player_num]
+        return req in keep
+
+    def exotic_check(self, req, player_num):
+
+        def fluxx_most_check(target, qualifiers, stats):
+            if sum(qualifiers) > 1:
+                max_keepers = max(stats)
+                winners = [s >= max_keepers for s in stats]
+                if sum(winners) > 1:
+                    return False
+                else:
+                    return winners[target]
+            if sum(qualifiers) == 1:
+                return qualifiers[target]
+            else:
+                return False
+
+        def _anyfood(target: int):
+            target = self.board.keeps[target]
+            return any([food in target for food in foods])
+
+        def _fivekeepers(target: int):
+            stats = [len(k) for k in self.board.keeps]
+            qualifiers = [s >= 5 for s in stats]
+            return fluxx_most_check(target, qualifiers, stats)
+
+        def _notv(target: int):
+            return not any(['Television' in k for k in self.board.keeps])
+
+        def _tencards(target: int):
+            stats = [len(h) for h in self.board.hands]
+            qualifiers = [s >= 10 for s in stats]
+            return fluxx_most_check(target, qualifiers, stats)
+
+        def tar_func(o):
+            pass
+
+        exec(f'tar_func = {req}')
+        return tar_func(player_num)
