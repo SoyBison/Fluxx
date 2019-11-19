@@ -11,6 +11,7 @@ class Board:
         self.play_state = 1
         self.draw_state = 1
         self.deck = Deck(self)
+        self.discard = Deck.discard_creator(self)
         self.num_players = num_players
         self.hands = [Hand(player_num) for player_num in range(num_players)]
         self.keeps = [Keep(player_num) for player_num in range(num_players)]
@@ -19,11 +20,14 @@ class Board:
         self.cards_played = 0
         self.cards_drawn = 0
         self.goals = GoalSpace()
+        self.rules = RuleSpace()
+        self.special_turn = None
 
     def inc_cards_played(self):
         self.cards_played += 1
         if self.cards_played > self.play_state:
-            raise self.TooManyCardsPlayed(f"Somehow someone played more than {self.play_state} cards this turn.")
+            raise self.TooManyCardsPlayed(f"Somehow player {self.player_state} played more than {self.play_state} "
+                                          f"cards this turn.")
         if self.cards_played == self.play_state:
             self.inc_player_state()
             # In strict rules, the turn ends when you play your last card. Some players are lenient on
@@ -48,6 +52,12 @@ class Board:
     class Win(Exception):
         def __init__(self, *args):
             super(Board.Win, self).__init__(*args)
+
+    def info(self):
+        return {'draws': self.draw_state, 'plays': self.play_state, 'player': self.player_state, 'keeps': self.keeps,
+                'goals': self.goals, 'rules': self.rules, 'discard': self.discard}
+
+
 
 
 class Card:
@@ -98,7 +108,7 @@ class Keeper(Card):
 class Deck(Sequence):
     def __init__(self, board):
         super(Deck, self).__init__()
-        self.values = []
+        self.values = keepers + list(goals.keys())  # TODO: Don't forget to add stuff to this as you add assets
         self._board = board
 
     @property
@@ -110,6 +120,12 @@ class Deck(Sequence):
 
     def __len__(self):
         return len(self.values)
+
+    @classmethod
+    def discard_creator(cls, board):
+        disc = Deck(board)
+        disc.values = []
+        return disc
 
 
 class Hand(MutableSet):
@@ -270,4 +286,10 @@ class Goal(Card):
         exec(f'tar_func = {req}')
         return tar_func(player_num)
 
+class RuleSpace(CardSpace):
+    def __init__(self):
+        super(RuleSpace, self).__init__(Rule)
 
+class Rule(Card):
+    def do(self):
+        self.board.rules.add(self)
