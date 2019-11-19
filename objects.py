@@ -18,7 +18,7 @@ class Board:
         self.player_state = 0
         self.cards_played = 0
         self.cards_drawn = 0
-        self.goals = Goal_Space()
+        self.goals = GoalSpace()
 
     def inc_cards_played(self):
         self.cards_played += 1
@@ -140,7 +140,7 @@ class Hand(MutableSet):
         self.cards = set()
 
 
-class Card_Space(MutableSet):
+class CardSpace(MutableSet):
     def add(self, x: _T) -> None:
         if isinstance(x, self.kind):
             self.cards.add(x)
@@ -164,13 +164,13 @@ class Card_Space(MutableSet):
         return iter(self.cards)
 
     def __init__(self, kind):
-        super(Card_Space, self).__init__()
+        super(CardSpace, self).__init__()
         self.cards = set()
         assert issubclass(kind, Card)
         self.kind = kind
 
 
-class Keep(Card_Space):
+class Keep(CardSpace):
 
     def __init__(self, player_num):
         super(Keep, self).__init__(Keeper)
@@ -178,11 +178,22 @@ class Keep(Card_Space):
         self.cards = set()
 
 
-class Goal_Space(Card_Space):
+class GoalSpace(CardSpace):
 
     def __init__(self):
-        super(Goal_Space, self).__init__(Goal)
+        super(GoalSpace, self).__init__(Goal)
         self.cards = set()
+        self.max_size = 1
+
+    def add(self, x):
+        if 1 == len(self) > self.max_size == 1:
+            self.cards.pop()
+        elif len(self) > self.max_size > 1:
+            ...  # Do a special turn for removing a goal
+        if isinstance(x, Goal):
+            self.cards.add(x)
+        else:
+            raise TypeError(f'You Cannot Add a {type(x)} to the Goals List')
 
 
 class Goal(Card):
@@ -258,3 +269,5 @@ class Goal(Card):
 
         exec(f'tar_func = {req}')
         return tar_func(player_num)
+
+
