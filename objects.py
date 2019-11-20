@@ -1,6 +1,5 @@
 from typing import Iterator, _T_co, _T
 from assets import *
-from numba import jit, jit_module, jitclass
 from abc import ABC, abstractmethod
 import random
 from collections import Sequence, MutableSet
@@ -53,11 +52,10 @@ class Board:
         def __init__(self, *args):
             super(Board.Win, self).__init__(*args)
 
+    @property
     def info(self):
         return {'draws': self.draw_state, 'plays': self.play_state, 'player': self.player_state, 'keeps': self.keeps,
                 'goals': self.goals, 'rules': self.rules, 'discard': self.discard}
-
-
 
 
 class Card:
@@ -170,7 +168,7 @@ class CardSpace(MutableSet):
     def __contains__(self, x: object) -> bool:
         if isinstance(x, self.kind):
             return x.name in {y.name for y in self.cards}
-        if isinstance(x, str): # In Fluxx, Card Names are unique identifiers.
+        if isinstance(x, str):  # In Fluxx, Card Names are unique identifiers.
             return x in {y.name for y in self.cards}
 
     def __len__(self) -> int:
@@ -280,16 +278,25 @@ class Goal(Card):
             qualifiers = [s >= 10 for s in stats]
             return fluxx_most_check(target, qualifiers, stats)
 
-        def tar_func(o):
-            pass
+        tardic = {'_anyfood': _anyfood, '_fivekeepers': _fivekeepers, '_notv': _notv, '_tencards': _tencards}
 
-        exec(f'tar_func = {req}')
-        return tar_func(player_num)
+        return tardic[req](player_num)
+
 
 class RuleSpace(CardSpace):
     def __init__(self):
         super(RuleSpace, self).__init__(Rule)
 
+    @property
+    def ruleset(self):
+        rules = [card.rule for card in self.cards]
+        return rules
+
+
 class Rule(Card):
     def do(self):
         self.board.rules.add(self)
+
+    @abstractmethod
+    def rule(self):
+        pass
