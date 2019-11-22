@@ -7,10 +7,8 @@ from collections import Sequence, MutableSet
 
 class Board:
     def __init__(self, num_players):
-        self.play_state = 1
-        self.draw_state = 1
         self.deck = Deck(self)
-        self.discard = Deck.discard_creator(self)
+        self.trash = Deck.discard_creator(self)
         self.num_players = num_players
         self.hands = [Hand(player_num) for player_num in range(num_players)]
         self.keeps = [Keep(player_num) for player_num in range(num_players)]
@@ -21,6 +19,8 @@ class Board:
         self.goals = GoalSpace()
         self.rules = RuleSpace()
         self.special_turn = None
+        self.draw_bonuses = []
+        self.play_bonuses = []
 
     def inc_cards_played(self):
         self.cards_played += 1
@@ -55,7 +55,15 @@ class Board:
     @property
     def info(self):
         return {'draws': self.draw_state, 'plays': self.play_state, 'player': self.player_state, 'keeps': self.keeps,
-                'goals': self.goals, 'rules': self.rules, 'discard': self.discard}
+                'goals': self.goals, 'rules': self.rules, 'discard': self.trash}
+
+    @property
+    def draw_state(self):
+        return sum(self.draw_bonuses)
+
+    @property
+    def play_state(self):
+        return sum(self.play_bonuses)
 
 
 class Card:
@@ -75,9 +83,11 @@ class Card:
 
     @abstractmethod
     def do(self):
-        pass
+        pass # Do some stuff to the board
 
-        # Do some stuff to the board
+    @abstractmethod
+    def trash(self):
+        pass # do cleanup tasks
 
     def play(self):
         self.do()
@@ -101,6 +111,11 @@ class Keeper(Card):
         tar_hand = self.board.hands[self.board.player_state]
         tar_keep.add(self)
         tar_hand.discard(self)
+
+    def trash(self):
+        tar_keep = [keep for keep in self.board.keeps if self in keep][0]
+        tar_keep.discard(self)
+        self.board.trash.append(self)
 
 
 class Deck(Sequence):
@@ -196,16 +211,18 @@ class GoalSpace(CardSpace):
 
     def __init__(self):
         super(GoalSpace, self).__init__(Goal)
-        self.cards = set()
+        self.cards = []  # This technically isn't totally appropriate, but it prevents us from having to target the goal
+        # in some way to trash it. When there isn't a double agenda, there's only ever one goal in here anyway, and it's
+        # inconsistent to pop the card then trash it.
         self.max_size = 1
 
     def add(self, x):
         if 1 == len(self) > self.max_size == 1:
-            self.cards.pop()
+            self.cards[0].trash()
         elif len(self) > self.max_size > 1:
             ...  # Do a special turn for removing a goal
         if isinstance(x, Goal):
-            self.cards.add(x)
+            self.cards.append(x)
         else:
             raise TypeError(f'You Cannot Add a {type(x)} to the Goals List')
 
@@ -214,6 +231,12 @@ class Goal(Card):
 
     def do(self):
         self.board.goals.add(self)
+        tar_hand = self.board.hands[self.board.player_state]
+        tar_hand.discard(self)
+
+    def trash(self):
+        self.board.goals.discard(self)
+        self.board.trash.append(self)
 
     def __init__(self, board, tag):
         """
@@ -261,26 +284,26 @@ class Goal(Card):
             else:
                 return False
 
-        def _anyfood(target: int):
-            target = self.board.keeps[target]
+        def _anyfood(target: int, g: Goal):
+            target = g.board.keeps[target]
             return any([food in target for food in foods])
 
-        def _fivekeepers(target: int):
-            stats = [len(k) for k in self.board.keeps]
+        def _fivekeepers(target: int, g: Goal):
+            stats = [len(k) for k in g.board.keeps]
             qualifiers = [s >= 5 for s in stats]
             return fluxx_most_check(target, qualifiers, stats)
 
-        def _notv(target: int):
-            return not any(['Television' in k for k in self.board.keeps])
+        def _notv(target: int, g: Goal):
+            return not any(['Television' in k for k in g.board.keeps]) and 'Brain' in g.board.keeps[target]
 
-        def _tencards(target: int):
-            stats = [len(h) for h in self.board.hands]
+        def _tencards(target: int, g: Goal):
+            stats = [len(h) for h in g.board.hands]
             qualifiers = [s >= 10 for s in stats]
             return fluxx_most_check(target, qualifiers, stats)
 
         tardic = {'_anyfood': _anyfood, '_fivekeepers': _fivekeepers, '_notv': _notv, '_tencards': _tencards}
 
-        return tardic[req](player_num)
+        return tardic[req](player_num, self)
 
 
 class RuleSpace(CardSpace):
@@ -296,7 +319,53 @@ class RuleSpace(CardSpace):
 class Rule(Card):
     def do(self):
         self.board.rules.add(self)
+        self.enact()
+
+    def trash(self):
+        self.board.rules.discard(self)
+        self.repeal()
 
     @abstractmethod
     def rule(self):
         pass
+
+    @abstractmethod
+    def enact(self):
+        pass
+
+    @abstractmethod
+    def repeal(self):
+        pass
+
+
+class Draw(Rule):
+    def __init__(self, board, tag):
+        name, draw_rule = tag
+        super(Draw, self).__init__(board, name)
+        self.draw_rule = draw_rule - 1
+
+    def enact(self):
+        self.board.draw_bonuses.append(self.draw_rule)
+
+    def repeal(self):
+        self.board.draw_bonuses.remove(self.draw_rule)
+
+    def rule(self):
+        pass
+
+
+class Play(Rule):
+    def __init__(self, board, tag):
+        name, play_rule = tag
+        super(Play, self).__init__(board, name)
+        self.play_rule = play_rule - 1
+
+    def enact(self):
+        self.board.play_bonuses.append(self.play_rule)
+
+    def repeal(self):
+        self.board.play_bonuses.remove(self.play_rule)
+
+    def rule(self):
+        pass
+
