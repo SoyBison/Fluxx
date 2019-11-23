@@ -47,3 +47,8 @@ goals = {
 
 # We use _ to denote exotic goals because there's only conventional meaning for it in python,
 # so I can call a function _func in objects.py.
+
+rules = {
+        'Draw': {'Draw 2': 2, 'Draw 3': 3, 'Draw 4': 4, 'Draw 5': 5},
+        'Play': {'Play 2': 2, 'Play 3': 3, 'Play 4': 4, 'Play All But 1': -1, 'Play All': 0}
+        }

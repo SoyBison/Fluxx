@@ -1,8 +1,9 @@
+from abc import abstractmethod
+from collections import MutableSequence, MutableSet
+# noinspection PyProtectedMember,PyProtectedMember
 from typing import Iterator, _T_co, _T
+
 from assets import *
-from abc import ABC, abstractmethod
-import random
-from collections import Sequence, MutableSet
 
 
 class Board:
@@ -21,6 +22,7 @@ class Board:
         self.special_turn = None
         self.draw_bonuses = []
         self.play_bonuses = []
+        self.card_set = self.deck.values
 
     def inc_cards_played(self):
         self.cards_played += 1
@@ -83,11 +85,11 @@ class Card:
 
     @abstractmethod
     def do(self):
-        pass # Do some stuff to the board
+        pass  # Do some stuff to the board
 
     @abstractmethod
     def trash(self):
-        pass # do cleanup tasks
+        pass  # do cleanup tasks
 
     def play(self):
         self.do()
@@ -118,10 +120,15 @@ class Keeper(Card):
         self.board.trash.append(self)
 
 
-class Deck(Sequence):
+class Deck(MutableSequence):
     def __init__(self, board):
         super(Deck, self).__init__()
-        self.values = keepers + list(goals.keys())  # TODO: Don't forget to add stuff to this as you add assets
+        self.targets = keepers + list(goals.items())
+        for cat in rules:
+            cardset = list(rules[cat].items())
+            self.targets += cardset
+        # TODO: Don't forget to add stuff to this as you add assets
+        self.values = []
         self._board = board
 
     @property
@@ -139,6 +146,15 @@ class Deck(Sequence):
         disc = Deck(board)
         disc.values = []
         return disc
+
+    def __setitem__(self, key, value):
+        if isinstance(value, tuple):
+            name, tag = value
+
+            if 'Play' == name[:4]:
+                self.values[key] = Play(self.board, value)
+            if 'Draw' == name[:4]:
+                self.values[key] = Draw(self.board, value)
 
 
 class Hand(MutableSet):
@@ -312,8 +328,8 @@ class RuleSpace(CardSpace):
 
     @property
     def ruleset(self):
-        rules = [card.rule for card in self.cards]
-        return rules
+        ruleset = [card.rule for card in self.cards]
+        return ruleset
 
 
 class Rule(Card):
@@ -342,7 +358,12 @@ class Draw(Rule):
     def __init__(self, board, tag):
         name, draw_rule = tag
         super(Draw, self).__init__(board, name)
-        self.draw_rule = draw_rule - 1
+        self.numeral = 0
+        self._draw_rule = draw_rule
+
+    @property
+    def draw_rule(self):
+        return self._draw_rule - 1 + self.numeral
 
     def enact(self):
         self.board.draw_bonuses.append(self.draw_rule)
@@ -358,14 +379,30 @@ class Play(Rule):
     def __init__(self, board, tag):
         name, play_rule = tag
         super(Play, self).__init__(board, name)
-        self.play_rule = play_rule - 1
+        self.last_num = None
+        self.numeral = 0
+        self._play_rule = play_rule
+
+    @property
+    def play_rule(self):
+        play_rule = self._play_rule
+        if play_rule > 0:
+            actual = play_rule - 1 + self.numeral
+        elif play_rule == 0:
+            actual = play_rule
+        else:
+            actual = play_rule - self.numeral
+        return actual
 
     def enact(self):
-        self.board.play_bonuses.append(self.play_rule)
+        pass
 
     def repeal(self):
         self.board.play_bonuses.remove(self.play_rule)
 
     def rule(self):
-        pass
-
+        if self.play_rule <= 0:
+            tarhand = self.play_rule
+            if self.last_num:
+                self.board.play_bonuses.remove(self.last_num)
+            self.board.play_bonuses.append()
