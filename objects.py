@@ -23,6 +23,7 @@ class Board:
         self.draw_bonuses = []
         self.play_bonuses = []
         self.card_set = self.deck.values
+        self.bonus_plays = [0 for _ in range(num_players)]
 
     def inc_cards_played(self):
         self.cards_played += 1
@@ -56,8 +57,9 @@ class Board:
 
     @property
     def info(self):
-        return {'draws': self.draw_state, 'plays': self.play_state, 'player': self.player_state, 'keeps': self.keeps,
-                'goals': self.goals, 'rules': self.rules, 'discard': self.trash}
+        return {'draws': self.draw_state, 'plays': self.play_state, 'player': self.player_state,
+                'keeps': self.keeps, 'goals': self.goals, 'rules': self.rules,
+                'discard': self.trash, 'hand': self.hands[self.player_state]}
 
     @property
     def draw_state(self):
@@ -147,14 +149,29 @@ class Deck(MutableSequence):
         disc.values = []
         return disc
 
-    def __setitem__(self, key, value):
+    def _card_create(self, value):
         if isinstance(value, tuple):
             name, tag = value
+            if isinstance(tag, int):
+                if 'Play' == name[:4]:
+                    return Play(self.board, value)
+                if 'Draw' == name[:4]:
+                    return Draw(self.board, value)
+            if isinstance(tag, tuple):
+                return Goal(self.board, value)
 
-            if 'Play' == name[:4]:
-                self.values[key] = Play(self.board, value)
-            if 'Draw' == name[:4]:
-                self.values[key] = Draw(self.board, value)
+                # TODO Add new options here as you add new cards.
+        if isinstance(value, Card):
+            return value
+
+    def __setitem__(self, key, value):
+        self.values[key] = self._card_create(value)
+
+    def insert(self, index: int, value: _T):
+        self.values.insert(index, self._card_create(value))
+
+    def __delitem__(self, key):
+        del self.values[key]
 
 
 class Hand(MutableSet):
@@ -263,6 +280,7 @@ class Goal(Card):
         name, reqs = tag
         super(Goal, self).__init__(board, name)
         self._reqs = reqs
+        self.numeral = 0
 
     @property
     def reqs(self):
@@ -306,7 +324,7 @@ class Goal(Card):
 
         def _fivekeepers(target: int, g: Goal):
             stats = [len(k) for k in g.board.keeps]
-            qualifiers = [s >= 5 for s in stats]
+            qualifiers = [s >= 5 + self.numeral for s in stats]
             return fluxx_most_check(target, qualifiers, stats)
 
         def _notv(target: int, g: Goal):
@@ -314,7 +332,7 @@ class Goal(Card):
 
         def _tencards(target: int, g: Goal):
             stats = [len(h) for h in g.board.hands]
-            qualifiers = [s >= 10 for s in stats]
+            qualifiers = [s >= 10 + self.numeral for s in stats]
             return fluxx_most_check(target, qualifiers, stats)
 
         tardic = {'_anyfood': _anyfood, '_fivekeepers': _fivekeepers, '_notv': _notv, '_tencards': _tencards}
@@ -395,14 +413,38 @@ class Play(Rule):
         return actual
 
     def enact(self):
-        pass
+        if self.play_rule > 0:
+            self.board.play_bonuses.append(self.play_rule)
 
     def repeal(self):
-        self.board.play_bonuses.remove(self.play_rule)
+        if self.play_rule > 0:
+            self.board.play_bonuses.remove(self.play_rule)
+        else:
+            self.board.play_bonuses.remove(self.last_num)
 
     def rule(self):
         if self.play_rule <= 0:
-            tarhand = self.play_rule
+            tarhand = self.board.hands[self.board.player_state]
             if self.last_num:
                 self.board.play_bonuses.remove(self.last_num)
-            self.board.play_bonuses.append()
+            self.board.play_bonuses.append(len(tarhand) + self.play_rule)
+            self.last_num = len(tarhand) + self.play_rule
+
+
+class Limit(Rule):
+    def __init__(self, board, name, number, tar_space):
+        super(Limit, self).__init__(board, name)
+        self._number = number
+        self.numeral = 0
+        self.tar_space = tar_space
+        self.tar_list = self.board.keeps if isinstance(self.tar_space, Keep) else self.board.hands
+
+    def enact(self):
+        pass
+
+    def repeal(self):
+        pass
+
+    def rule(self):
+        ...
+        # Check everyone's platter for violations, then enact a special turn for deleting violations.

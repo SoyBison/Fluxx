@@ -4,6 +4,7 @@ game, especially those which have their own behavior. You'll notice I didn't inc
 are considered an auxiliary mechanic by most players. Every card-code in this file which has an underscore before it
 refers to a card which has special behavior within its class. This behavior is recorded in subclasses for their type.
 The foodlist is stored here, too.
+
 """
 
 
