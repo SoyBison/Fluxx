@@ -2,6 +2,7 @@ from abc import abstractmethod
 from collections import MutableSequence, MutableSet
 # noinspection PyProtectedMember,PyProtectedMember
 from typing import Iterator, _T_co, _T
+from random import randint
 
 from assets import *
 
@@ -20,10 +21,12 @@ class Board:
         self.goals = GoalSpace()
         self.rules = RuleSpace()
         self.special_turn = None
+        self.numeral = 0
         self.draw_bonuses = []
         self.play_bonuses = []
         self.card_set = self.deck.values
         self.bonus_plays = [0 for _ in range(num_players)]
+        self.special_turns = {}
 
     def inc_cards_played(self):
         self.cards_played += 1
@@ -63,11 +66,17 @@ class Board:
 
     @property
     def draw_state(self):
-        return sum(self.draw_bonuses)
+        return sum(self.draw_bonuses) + 1 + self.numeral
 
     @property
     def play_state(self):
-        return sum(self.play_bonuses)
+        return sum(self.play_bonuses) + 1 + self.numeral
+
+    def limit_check(self):
+        ...  # TODO: Add special Actions
+
+    def action(self):
+        ...  # TODO: Add normal Actions
 
 
 class Card:
@@ -76,6 +85,7 @@ class Card:
         # game it is in, and is always connected to the game that it's initialized for.
         self._board = board
         self._name = name
+        self.numeral = None
 
     @property
     def board(self):
@@ -378,6 +388,7 @@ class Draw(Rule):
         super(Draw, self).__init__(board, name)
         self.numeral = 0
         self._draw_rule = draw_rule
+        self.last = None
 
     @property
     def draw_rule(self):
@@ -385,12 +396,16 @@ class Draw(Rule):
 
     def enact(self):
         self.board.draw_bonuses.append(self.draw_rule)
+        self.last = self.draw_rule
 
     def repeal(self):
-        self.board.draw_bonuses.remove(self.draw_rule)
+        self.board.draw_bonuses.remove(self.last)
+        self.last = None
 
     def rule(self):
-        pass
+        self.board.draw_bonuses.remove(self.last)
+        self.board.draw_bonuses.append(self.draw_rule)
+        self.last = self.draw_rule
 
 
 class Play(Rule):
@@ -432,12 +447,17 @@ class Play(Rule):
 
 
 class Limit(Rule):
-    def __init__(self, board, name, number, tar_space):
+    def __init__(self, board, name, tag):
         super(Limit, self).__init__(board, name)
+        number, tar_space = tag
         self._number = number
         self.numeral = 0
         self.tar_space = tar_space
-        self.tar_list = self.board.keeps if isinstance(self.tar_space, Keep) else self.board.hands
+        self.tar_list = self.board.keeps if self.tar_space is Keep else self.board.hands
+
+    @property
+    def number(self):
+        return self._number + self.numeral
 
     def enact(self):
         pass
@@ -446,5 +466,124 @@ class Limit(Rule):
         pass
 
     def rule(self):
+        def checkr(space: CardSpace):
+            if len(space > self.number):
+                return True
+            elif len(space <= self.number):
+                return False
+
+        limit_fails = [sp.player_num for sp in filter(checkr, self.tar_list)]
+
+        for player in limit_fails:
+            self.board.limit_check(player, self.tar_space)
+        # Check everyone's platter for violations, then enact a special action for deleting violations.
+
+
+class Effect(Rule):
+    def __init__(self, board, name, tag):
+        super(Effect, self).__init__(board, name)
+        self.tag = tag
+        self._marker = 1
+        if self.tag in {'e_partybonus', 'e_poorbonus', 'e_richbonus'}:
+            self.numeral = 0
+        self.last = None
+
+    @property
+    def marker(self):
+        return self._marker + self.numeral
+
+    def enact(self):
+        if self.tag in {'e_partybonus', 'e_poorbonus', 'e_richbonus'}:
+            self.last = self.marker
+        if self.tag == 'e_inflation':
+            for card in self.board.card_set:
+                if card.numeral is not None:
+                    card.numeral = 1
+        if self.tag == 'e_doubleagenda':
+            self.board.goals.max_size = 2
+
+    def repeal(self):
+        if self.tag in {'e_partybonus', 'e_poorbonus'}:
+            self.board.draw_bonuses.remove(self.last)
+            self.last = None
+        if self.tag in {'e_partybonus', 'e_richbonus'}:
+            self.board.play_bonuses.remove(self.last)
+            self.last = None
+        if self.tag == 'e_inflation':
+            for card in self.board.card_set:
+                if card.numeral is not None:
+                    card.numeral = 0
+        if self.tag == 'e_doubleagenda':
+            self.board.goals.max_size = 1
+
+    def rule(self):
+        if self.tag in {'e_inflation', 'e_doubleagenda'}:
+            return None
+        if self.tag in {'e_partybonus', 'e_poorbonus'}:
+            self.board.draw_bonuses.remove(self.last)
+            self.board.draw_bonuses.append(self.marker)
+            self.last = self.marker
+        if self.tag in {'e_partybonus', 'e_richbonus'}:
+            self.board.play_bonuses.remove(self.last)
+            self.board.play_bonuses.append(self.marker)
+            self.last = self.marker
+
+
+class Start(Rule):
+    def __init__(self, board, name, tag):
+        super(Start, self).__init__(board, name)
+        self.tag = tag
+        if tag in {'s_nohandbonus'}:
+            self.numeral = 0
+        self.last = None
+
+    @property
+    def size(self):
+        if self.tag == 's_nohandbonus':
+            return 3 + self.numeral
+        else:
+            raise TypeError(f'Card {self.name} does not have a size.')
+
+    def enact(self):
+        if self.tag in {'s_nohandbonus'}:
+            self.board.draw_bonuses.append(self.size)
+            self.last = self.size
+
+    def repeal(self):
+        if self.tag in {'s_nohandbonus'}:
+            self.board.draw_bonuses.remove(self.last)
+            self.last = self.size
+
+    def rule(self):
+        if self.tag in {'s_nohandbonus'}:
+            self.board.draw_bonuses.remove(self.last)
+            self.board.draw_bonuses.append(self.size)
+            self.last = self.size
+        if self.tag in {'s_firstplayrandom'}:
+            curr_hand = self.board.hands[self.board.player_state]
+            if self.board.cards_played == 0 and self.board.play_state > 1:
+                curr_hand.play(randint(0, len(curr_hand)))
+
+
+class FreeAction(Rule):
+    def __init__(self, board, name, tag):
+        super(FreeAction, self).__init__(board, name)
+        self.tag = tag
+        if self.tag in {'fa_recycling', 'fa_getonwithit'}:
+            self.numeral = 0
+
+    @property
+    def size(self):
+        if self.tag in {'fa_recycling', 'fa_getonwithit'}:
+            return 3 + self.numeral
+        else:
+            raise TypeError(f'Card {self.name} does not have a size.')
+
+    def enact(self):
         ...
-        # Check everyone's platter for violations, then enact a special turn for deleting violations.
+
+    def repeal(self):
+        ...
+
+    def rule(self):
+        ...
