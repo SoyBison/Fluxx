@@ -580,10 +580,10 @@ class FreeAction(Rule):
             raise TypeError(f'Card {self.name} does not have a size.')
 
     def enact(self):
-        ...
+        pass
 
     def repeal(self):
-        ...
+        pass
 
     def rule(self):
-        ...
+        pass
