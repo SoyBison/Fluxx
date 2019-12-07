@@ -57,5 +57,9 @@ rules = {
                   'Keeper Limit 4': (4, Keep), 'Keeper Limit 3': (3, Keep), 'Keeper Limit 2': (2, Keep)},
         'Effect': {'Party Bonus': 'e_partybonus', 'Rich Bonus': 'e_richbonus', 'Poor Bonus': 'e_poorbonus',
                    'Inflation': 'e_inflation', 'Double Agenda': 'e_doubleagenda'},
-        'Start': {'First Play Random': 's_firstplayrandom', 'No-Hand Bonus': 's_nohandbonus'}
+        'Start': {'First Play Random': 's_firstplayrandom', 'No-Hand Bonus': 's_nohandbonus'},
+        'Free Action': {'Swap Plays For Draws': 'fa_swapplaysfordraws', 'Mystery Play': 'fa_mysteryplay',
+                         'Goal Mill': 'fa_goalmill', 'Get On With It!': 'fa_getonwithit', 'Recycling': 'fa_recycling'}
         }
+
+actions = {}

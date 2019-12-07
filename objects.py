@@ -2,7 +2,7 @@ from abc import abstractmethod
 from collections import MutableSequence, MutableSet
 # noinspection PyProtectedMember,PyProtectedMember
 from typing import Iterator, _T_co, _T
-from random import randint
+from random import randint, shuffle
 
 from assets import *
 
@@ -12,7 +12,7 @@ class Board:
         self.deck = Deck(self)
         self.trash = Deck.discard_creator(self)
         self.num_players = num_players
-        self.hands = [Hand(player_num) for player_num in range(num_players)]
+        self.hands = [Hand(player_num, self) for player_num in range(num_players)]
         self.keeps = [Keep(player_num) for player_num in range(num_players)]
         self.turn_num = 0
         self.player_state = 0
@@ -26,14 +26,13 @@ class Board:
         self.play_bonuses = []
         self.card_set = self.deck.values
         self.bonus_plays = [0 for _ in range(num_players)]
-        self.special_turns = {}
+        self.special_actions = set()
+        self.action_type = 'normal'
+        self.limit_state = None
 
     def inc_cards_played(self):
         self.cards_played += 1
-        if self.cards_played > self.play_state:
-            raise self.TooManyCardsPlayed(f"Somehow player {self.player_state} played more than {self.play_state} "
-                                          f"cards this turn.")
-        if self.cards_played == self.play_state:
+        if self.cards_played >= self.play_state:
             self.inc_player_state()
             # In strict rules, the turn ends when you play your last card. Some players are lenient on
             # this and allow people to take a free action after their last play.
@@ -59,24 +58,75 @@ class Board:
             super(Board.Win, self).__init__(*args)
 
     @property
+    def options(self):
+        return {'normal': list(self.hands[self.active_player]) + list(self.special_actions),
+                'handlimit': list(self.hands[self.active_player]),
+                'keeperlimit': list(self.keeps[self.active_player]),
+                'goalmill': [card for card in list(self.hands[self.active_player]) if isinstance(card, Goal)],
+                'recycling': list(self.keeps[self.active_player])
+                }[self.action_type]
+
+    @property
     def info(self):
-        return {'draws': self.draw_state, 'plays': self.play_state, 'player': self.player_state,
+        return {'draws': self.draw_state, 'plays': self.play_state, 'player': self.active_player,
                 'keeps': self.keeps, 'goals': self.goals, 'rules': self.rules,
-                'discard': self.trash, 'hand': self.hands[self.player_state]}
+                'discard': self.trash, 'hand': self.hands[self.player_state], 'options': self.options,
+                'actiontype': self.action_type}
 
     @property
     def draw_state(self):
         return sum(self.draw_bonuses) + 1 + self.numeral
 
     @property
+    def active_player(self):
+        if self.action_type.endswith('limit'):
+            return self.limit_state
+        else:
+            return self.player_state
+
+    @property
     def play_state(self):
         return sum(self.play_bonuses) + 1 + self.numeral
 
-    def limit_check(self):
-        ...  # TODO: Add special Actions
+    def action(self, option):
+        hand = self.hands[self.active_player]
+        keep = self.keeps[self.active_player]
+        if self.action_type == 'normal':
+            choice = self.options[option]
+            if not isinstance(choice, FreeAction):
+                choice.do()
+                self.inc_cards_played()
+            if isinstance(choice, FreeAction):
+                choice.effect()
 
-    def action(self):
-        ...  # TODO: Add normal Actions
+        if self.action_type == 'handlimit':
+            if isinstance(option, int):
+                option = [option]
+            for choice in option:
+                card = self.options[choice]
+                hand.discard(card)
+
+        if self.action_type == 'keeperlimit':
+            if isinstance(option, int):
+                option = [option]
+            for choice in option:
+                card = self.options[choice]
+                keep.discard(card)
+
+        if self.action_type == 'goalmill':
+            if isinstance(option, int):
+                option = [option]
+            for choice in option:
+                card = self.options[choice]
+                hand.discard(card)
+                hand.draw(1)
+
+        if self.action_type == 'recycling':
+            self.options[option].trash()
+            recyclingcard = [card for card in self.card_set if card.tag == 'fa_recycling'][0]
+            hand.draw(3 + recyclingcard.numeral)
+
+        self.check_goal()
 
 
 class Card:
@@ -104,9 +154,9 @@ class Card:
         pass  # do cleanup tasks
 
     def play(self):
-        self.do()
-        self.board.inc_cards_played()
-        self.board.check_goal()
+        hand = self.board.hands[self.board.player_state]
+        if self in hand:
+            hand.cards.discard(self)
 
     def __hash__(self):
         return hash(self.name + repr(self.board))
@@ -124,7 +174,7 @@ class Keeper(Card):
         tar_keep = self.board.keeps[self.board.player_state]
         tar_hand = self.board.hands[self.board.player_state]
         tar_keep.add(self)
-        tar_hand.discard(self)
+        tar_hand.cards.discard(self)
 
     def trash(self):
         tar_keep = [keep for keep in self.board.keeps if self in keep][0]
@@ -135,12 +185,25 @@ class Keeper(Card):
 class Deck(MutableSequence):
     def __init__(self, board):
         super(Deck, self).__init__()
-        self.targets = keepers + list(goals.items())
-        for cat in rules:
-            cardset = list(rules[cat].items())
-            self.targets += cardset
-        # TODO: Don't forget to add stuff to this as you add assets
         self.values = []
+        rule_cats = {'Draw': Draw, 'Play': Play, 'Limit': Limit, 'Free Actions': FreeAction,
+                     'Effect': Effect, 'Start': Start}
+        action_cats = {}  # TODO: Keep this up to date
+        for name in keepers:
+            self.values.append(Keeper(self.board, name))
+        for tag in goals.items():
+            self.values.append(Goal(board, tag))
+
+        for cat in rules:
+            ruleset = list(rules[cat].items())
+            for name, tag in ruleset:
+                self.values.append(rule_cats[cat](self.board, name, tag))
+        for cat in actions:
+            ruleset = list(rules[cat].items())
+            for name, tag in ruleset:
+                self.values.append(action_cats[cat](self.board, name, tag))
+
+        shuffle(self.values)
         self._board = board
 
     @property
@@ -159,29 +222,17 @@ class Deck(MutableSequence):
         disc.values = []
         return disc
 
-    def _card_create(self, value):
-        if isinstance(value, tuple):
-            name, tag = value
-            if isinstance(tag, int):
-                if 'Play' == name[:4]:
-                    return Play(self.board, value)
-                if 'Draw' == name[:4]:
-                    return Draw(self.board, value)
-            if isinstance(tag, tuple):
-                return Goal(self.board, value)
-
-                # TODO Add new options here as you add new cards.
-        if isinstance(value, Card):
-            return value
-
     def __setitem__(self, key, value):
-        self.values[key] = self._card_create(value)
+        self.values[key] = value
 
     def insert(self, index: int, value: _T):
-        self.values.insert(index, self._card_create(value))
+        self.values.insert(index, value)
 
     def __delitem__(self, key):
         del self.values[key]
+
+    def draw(self):
+        return self.pop(0)
 
 
 class Hand(MutableSet):
@@ -192,9 +243,9 @@ class Hand(MutableSet):
         else:
             raise TypeError('A hand can only contain cards.')
 
-    def discard(self, x: _T) -> None:
+    def discard(self, x: Card) -> None:
         self.cards.discard(x)
-        x.play()
+        self.board.trash.append(x)
 
     def __contains__(self, x: object) -> bool:
         if isinstance(x, Card):
@@ -206,10 +257,23 @@ class Hand(MutableSet):
     def __iter__(self) -> Iterator[_T_co]:
         return iter(self.cards)
 
-    def __init__(self, player_num):
+    def __init__(self, player_num, board, _draw=True):
         super(Hand, self).__init__()
         self.player_num = player_num
         self.cards = set()
+        self.board = board
+        if _draw:
+            self.draw(3)
+
+    def draw(self, amount):
+        for _ in range(amount):
+            self.add(self.board.deck.draw())
+
+    @classmethod
+    def temphand(cls, size, board):
+        h = Hand(-1, board, _draw=False)
+        h.draw(size)
+        return h
 
 
 class CardSpace(MutableSet):
@@ -219,9 +283,8 @@ class CardSpace(MutableSet):
         else:
             raise TypeError('A hand can only contain cards.')
 
-    def discard(self, x: _T) -> None:
+    def discard(self, x: Card) -> None:
         self.cards.discard(x)
-        x.play()
 
     def __contains__(self, x: object) -> bool:
         if isinstance(x, self.kind):
@@ -474,9 +537,12 @@ class Limit(Rule):
 
         limit_fails = [sp.player_num for sp in filter(checkr, self.tar_list)]
 
-        for player in limit_fails:
-            self.board.limit_check(player, self.tar_space)
-        # Check everyone's platter for violations, then enact a special action for deleting violations.
+        if limit_fails:
+            player = limit_fails[0]
+            self.board.action_type = 'limit'
+            self.board.limit_state = player
+        else:
+            self.board.limit_state = None
 
 
 class Effect(Rule):
@@ -562,7 +628,7 @@ class Start(Rule):
         if self.tag in {'s_firstplayrandom'}:
             curr_hand = self.board.hands[self.board.player_state]
             if self.board.cards_played == 0 and self.board.play_state > 1:
-                curr_hand.play(randint(0, len(curr_hand)))
+                curr_hand.do(randint(0, len(curr_hand)))
 
 
 class FreeAction(Rule):
@@ -571,6 +637,8 @@ class FreeAction(Rule):
         self.tag = tag
         if self.tag in {'fa_recycling', 'fa_getonwithit'}:
             self.numeral = 0
+        self.used = False
+        self.last_used = None
 
     @property
     def size(self):
@@ -580,10 +648,36 @@ class FreeAction(Rule):
             raise TypeError(f'Card {self.name} does not have a size.')
 
     def enact(self):
-        pass
+        self.board.special_actions.add(self)
 
     def repeal(self):
-        pass
+        self.board.special_actions.discard(self)
 
     def rule(self):
         pass
+
+    def effect(self):
+        hand = self.board.hands[self.board.player_state]
+        keep = self.board.keeps[self.board.player_state]
+        self.used = True
+        self.last_used = self.board.player_state
+        if self.tag == 'fa_swapplaysfordraws':
+            hand.draw(self.board.play_state - self.board.cards_played)
+            for _ in range(self.board.play_state - self.board.cards_played):
+                self.board.inc_cards_played()
+        if self.tag == 'fa_mysteryplay':
+            self.board.deck.draw().play()
+        if self.tag == 'fa_goalmill':
+            self.board.special_turn = 'goalmill'
+        if self.tag == 'fa_getonwithit':
+            if len(hand) > 0:
+                for card in hand:
+                    hand.discard(card)
+                hand.draw(3)
+            else:
+                raise ValueError('You cannot use Get On With It! with an empty hand.')
+        if self.tag == 'fa_recycling':
+            if len(keep) > 0:
+                self.board.special_turn = 'recycling'
+            else:
+                raise ValueError('You cannot use Recycling with an empty keep.')
