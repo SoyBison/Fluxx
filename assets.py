@@ -63,7 +63,7 @@ rules = {
 
 actions = {'Share the Wealth': 'a_sharethewealth', 'Discard and Draw': 'a_discardanddraw',
            'Draw 3, Play 2 of Them': 'a_draw3play2', 'Everybody Gets 1': 'a_everybody1', 'Zap a Card': 'a_zap',
-           'Jackpot!': 'a_jackpot', 'Take Another Turn': 'a_takeanotherturn',
+           'Jackpot!': 'a_jackpot', 'Take Another Turn': 'a_anotherturn',
            'Rotate Hands': 'a_rotatehands', "Let's Do That Again!": 'a_dothatagain', 'Steal a Keeper': 'a_steal',
            "Let's Simplify": 'a_simplify', 'Trash a Keeper': 'a_trash', 'Exchange Keepers': 'a_exchange',
            'Trade Hands': 'a_trade', 'Rules Reset': 'a_rulesreset', "Draw 2 and Use 'Em": 'a_draw2use2',
