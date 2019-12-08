@@ -17,10 +17,11 @@ def start_screen():
         return False
 
 
-
 def print_info():
     global board
     info = board.info
+    options = list(enumerate(info['options']))
+    split_options = [options[i * 5:(i + 1) * 5] for i in range((len(options) + 5 - 1) // 5)]
     print('\n')
     print(f"It is player {info['player']}'s turn.")
     print(f'Rules state {info["draws"]} draws and {info["plays"]} plays')
@@ -33,7 +34,10 @@ def print_info():
     print(f"The Rules are {[card.name for card in info['rules']]}")
     print(f"This is a {info['actiontype']} action.")
     print(f"You have {info['remaining']} plays remaining.")
-    print(f"Your options are: {info['options']}")
+    print(f"Your options are:")
+    for options in split_options:
+        print('    '.join([f'{i}: {name}' for i, name in options]))
+    print(f"You have drawn {info['drawn']} cards.")
 
 
 def interact(entry):
@@ -44,11 +48,13 @@ def interact(entry):
         else:
             board.action(entry)
         print_info()
-    except (Board.IllegalMove, IndexError) as e:
+    except (Board.IllegalMove, IndexError, TypeError) as e:
         if isinstance(e, IndexError):
-            print("That isn't an available option.")
+            print("That isn't an available option.", e)
         if isinstance(e, Board.IllegalMove):
             print(e)
+        elif isinstance(e, TypeError):
+            print("That isn't an available option.", e)
 
 
 def play_game(_):
@@ -65,12 +71,15 @@ def play_game(_):
             elif entry == 'i':
                 print_info()
             else:
-                entry = entry.replace(' ', '').split(',')
-                entry = list(filter(lambda a: a != '', entry))
-                entry = [int(x) - 1 for x in entry]
+                try:
+                    entry = entry.replace(' ', '').split(',')
+                    entry = list(filter(lambda a: a != '', entry))
+                    entry = [int(x) for x in entry]
+                except ValueError:
+                    print("That isn't an option, try again.")
                 interact(entry)
-        except Board.Win:
-            print('Congratulations')
+        except Board.Win as e:
+            print(f'Congratulations player {e}')
             sys.exit()
 
 

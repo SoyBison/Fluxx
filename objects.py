@@ -19,7 +19,7 @@ class Board:
         self.turn_num = 0
         self.player_state = 0
         self.cards_played = 0
-        self.cards_drawn = 0
+        self.cards_drawn = 1
         self.goals = GoalSpace(self)
         self.rules = RuleSpace(self)
         self.temp_cards_played = 0
@@ -39,19 +39,18 @@ class Board:
     def inc_cards_played(self):
         self.cards_played += 1
         freeturncard = [card for card in self.card_set if card.tag == 'a_anotherturn'][0]
-        if self.cards_played >= self.play_state and self.action_type == 'normal':
+        if (self.cards_played >= self.play_state and self.action_type == 'normal') or len(self.curr_hand) == 0:
             if not self.free_turn:
                 self.inc_player_state()
                 self.curr_hand.draw(self.draw_state)
                 freeturncard.used = False
             else:
                 self.curr_hand.draw(self.draw_state)
-                self.cards_drawn += self.draw_state
                 self.free_turn = False
             # In strict rules, the turn ends when you play your last card. Some players are lenient on
             # this and allow people to take a free action after their last play.
             self.cards_played = 0
-            self.cards_drawn = 0
+            self.cards_drawn = self.draw_state
 
     class IllegalMove(Exception):
         def __init__(self, board, *args):
@@ -75,17 +74,27 @@ class Board:
         if self.goals:
             for goal in self.goals:
                 winner = goal.evaluate
-                if winner:
-                    raise self.Win(f'Player {winner}')
+                if winner is not None:
+                    raise Board.Win(f'Player {winner}')
 
     def check_rules(self):
         if self.rules:
             for rule in self.rules.ruleset:
                 rule()
+        if self.draw_state > self.cards_drawn > 0:
+            self.curr_hand.draw(self.draw_state - self.cards_drawn)
+            self.cards_drawn += (self.draw_state - self.cards_drawn)
+        if self.cards_played == self.play_state:
+            self.inc_cards_played()
 
     class Win(Exception):
         def __init__(self, *args):
             super(Board.Win, self).__init__(*args)
+
+    def check_starts(self):
+        starts = [rule for rule in self.rules if isinstance(rule, Start)]
+        for card in starts:
+            card.start()
 
     @property
     def card_set(self):
@@ -97,7 +106,7 @@ class Board:
     @property
     def curr_hand(self):
         return self.hands[self.active_player]
-    
+
     @property
     def curr_keep(self):
         return self.keeps[self.active_player]
@@ -135,25 +144,28 @@ class Board:
         elif self.action_type == 'exchange2':
             return list(self.curr_keep)
         elif self.action_type == 'trade':
-            return list(range(self.num_players))
+            return list(p for p in range(self.num_players) if p != self.active_player)
         elif self.action_type == 'usetake':
             return [player for player in list(range(self.num_players)) if player != self.active_player]
 
     @property
     def info(self):
+        remaining = self.play_state - self.cards_played
+        if remaining < 0:
+            remaining = 0
         return {'draws': self.draw_state, 'plays': self.play_state, 'player': self.active_player,
                 'keeps': self.keeps, 'goals': self.goals, 'rules': self.rules,
                 'discard': self.trash, 'hand': self.hands[self.player_state], 'options': self.options,
                 'actiontype': self.action_type, 'mystery': self.mysteryplay,
-                'remaining': self.play_state - self.cards_played}
+                'remaining': remaining, 'drawn': self.cards_drawn}
 
     @property
     def draw_state(self):
-        return sum(self.draw_bonuses) + 1 + self.numeral
+        return sum(self.draw_bonuses) + 1 + (self.numeral * (not any([isinstance(rule, Draw) for rule in self.rules])))
 
     @property
     def active_player(self):
-        if self.action_type.endswith('limit'):
+        if self.action_type.endswith('limit') and self.limit_state is not None:
             return self.limit_state
         else:
             return self.player_state
@@ -165,6 +177,7 @@ class Board:
     def action(self, option):
         hand = self.curr_hand
         keep = self.curr_keep
+        self.check_rules()
         if self.action_type == 'normal':
             pick = self.options[option]
             if pick in self.curr_hand:
@@ -174,18 +187,12 @@ class Board:
                 pick.effect()
 
         elif self.action_type == 'handlimit':
-            if isinstance(option, int):
-                option = [option]
-            for pick in option:
-                card = self.options[pick]
-                hand.discard(card)
+            card = self.options[option]
+            hand.discard(card)
 
         elif self.action_type == 'keeperlimit':
-            if isinstance(option, int):
-                option = [option]
-            for pick in option:
-                card = self.options[pick]
-                keep.discard(card)
+            card = self.options[option]
+            keep.discard(card)
 
         elif self.action_type == 'goalmill':
             if isinstance(option, int):
@@ -321,15 +328,15 @@ class Board:
             assert isinstance(pick, int)
             tarhand = self.hands[pick]
             for card in self.curr_hand:
-                self.curr_hand.cards.discard(card)
                 temp[0].append(card)
             for card in tarhand:
-                tarhand.cards.discard(card)
                 temp[1].append(card)
             for card in temp[0]:
                 tarhand.add(card)
+                self.curr_hand.discard(card)
             for card in temp[1]:
                 self.curr_hand.add(card)
+                tarhand.discard(card)
 
         elif self.action_type == 'usetake':
             pick = self.options[option]
@@ -724,9 +731,6 @@ class Draw(Rule):
         self.board.draw_bonuses.remove(self.last)
         self.board.draw_bonuses.append(self.draw_rule)
         self.last = self.draw_rule
-        if self.board.cards_drawn < self.board.draw_state:
-            self.board.curr_hand.draw(self.board.draw_state - self.board.cards_drawn)
-            self.board.cards_drawn += self.board.draw_state - self.board.cards_drawn
 
 
 class Play(Rule):
@@ -744,9 +748,10 @@ class Play(Rule):
         if play_rule > 0:
             actual = play_rule - 1 + self.numeral
         elif play_rule == 0:
-            actual = play_rule
+            actual = play_rule - 1
         else:
-            actual = play_rule - self.numeral
+            actual = play_rule - self.numeral - 1
+        self.board.cards_played = 0
         return actual
 
     def enact(self):
@@ -806,7 +811,8 @@ class Limit(Rule):
             elif len(space) <= self.number:
                 return False
 
-        limit_fails = [sp.player_num for sp in filter(checkr, self.tar_list)]
+        limit_fails = [sp.player_num for sp in filter(checkr, self.tar_list)
+                       if sp.player_num != self.board.player_state]
 
         if limit_fails:
             player = limit_fails[0]
@@ -886,12 +892,6 @@ class Effect(Rule):
         if self.tag in {'e_inflation', 'e_doubleagenda'}:
             pass
 
-        if self.tag in {'e_partybonus', 'e_richbonus'}:
-            if self.last:
-                self.board.play_bonuses.remove(self.last)
-            self.board.play_bonuses.append(self.marker)
-            self.last = self.marker
-
 
 class Start(Rule):
     def __init__(self, board, name, tag):
@@ -909,24 +909,20 @@ class Start(Rule):
             raise TypeError(f'Card {self.name} does not have a size.')
 
     def enact(self):
-        if self.tag in {'s_nohandbonus'}:
-            self.board.draw_bonuses.append(self.size)
-            self.last = self.size
+        pass
 
     def repeal(self):
-        if self.tag in {'s_nohandbonus'}:
-            self.board.draw_bonuses.remove(self.last)
-            self.last = self.size
+        pass
 
     def rule(self):
-        if self.tag in {'s_nohandbonus'}:
-            self.board.draw_bonuses.remove(self.last)
-            self.board.draw_bonuses.append(self.size)
-            self.last = self.size
-        if self.tag in {'s_firstplayrandom'}:
-            curr_hand = self.board.curr_hand
-            if self.board.cards_played == 0 and self.board.play_state > 1:
-                curr_hand.do(randint(0, len(curr_hand)))
+        pass
+
+    def start(self):
+        if self.tag == 's_nohandbonus':
+            self.board.curr_hand.draw(self.size)
+        if self.tag == 's_firstplayrandom' and self.board.play_state > 1:
+            pick = choice(list(self.board.curr_hand))
+            pick.play()
 
 
 class FreeAction(Rule):
@@ -968,7 +964,9 @@ class FreeAction(Rule):
             mcard.play()
             self.board.mysteryplay = mcard
         if self.tag == 'fa_goalmill':
-            self.board.special_turn = 'goalmill'
+            self.board.action_type = 'goalmill'
+            if len(self.board.options) == 0:
+                raise Board.IllegalMove('You have no goals.')
         if self.tag == 'fa_getonwithit':
             if len(hand) > 0:
                 for card in hand:
@@ -978,7 +976,7 @@ class FreeAction(Rule):
                 raise Board.IllegalMove(self, 'You cannot use Get On With It! with an empty hand.')
         if self.tag == 'fa_recycling':
             if len(keep) > 0:
-                self.board.special_turn = 'recycling'
+                self.board.action_type = 'recycling'
             else:
                 raise Board.IllegalMove(self, 'You cannot use Recycling with an empty keep.')
 
@@ -1050,8 +1048,9 @@ class Action(Card):
         held_keepers = []
         for keep in self.board.keeps:
             for keeper in keep:
-                keep.discard(keeper)
                 held_keepers.append(keeper)
+        for keeper in held_keepers:
+            keeper.discard_from_keep()
         shuffle(held_keepers)
         playerlist = cycle(range(self.board.num_players))
         for _ in range(self.board.player_state):
