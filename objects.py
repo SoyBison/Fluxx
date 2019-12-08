@@ -20,9 +20,11 @@ class Board:
     """
     The Board object houses all of the information about the current game. Each card in the game has to be connected
     to a Board object.
+
     :type num_players: int The number of players playing the game.
     """
-    def __init__(self, num_players):
+
+    def __init__(self, num_players: int):
 
         self.deck = Deck(self)
         self.hands = [Hand(player_num, self) for player_num in range(num_players)]
@@ -51,6 +53,12 @@ class Board:
         self.mysteryplay = None
 
     def inc_cards_played(self):
+        """
+        Increases the count of cards played. If the count goes over the `play_state`, then the `turn_state` will
+        roll-over to the next player.
+
+        :return: NoneType
+        """
         self.cards_played += 1
         freeturncard = [card for card in self.card_set if card.tag == 'a_anotherturn'][0]
         if (self.cards_played >= self.play_state and self.action_type == 'normal') or len(self.curr_hand) == 0:
@@ -68,24 +76,38 @@ class Board:
             self.check_starts()
 
     class IllegalMove(Exception):
+        """
+        Thrown when the player tries to do something illegal.
+        """
+
         def __init__(self, board, *args):
             super(Board.IllegalMove, self).__init__(*args)
             self.board = board
 
     class IllegalPlay(IllegalMove):
+        """
+        Thrown when the player tries to play a card in an illegal way. Undoes the card_played effect.
+        """
+
         def __init__(self, board, *args):
             super(Board.IllegalPlay, self).__init__(board, *args)
             self.board.cards_played -= 1
 
     def inc_player_state(self):
+        """
+        Increases the `turn_num`, and calculates the current player state.
+
+        :return: NoneType
+        """
         self.turn_num += 1
         self.player_state = self.turn_num % self.num_players
 
-    class TooManyCardsPlayed(Exception):
-        def __init__(self, *args):
-            super(Board.TooManyCardsPlayed, self).__init__(*args)
-
     def check_goal(self):
+        """
+        Checks to see if the goal has been satisfied. If it has, then it throws a win.
+
+        :return: NoneType
+        """
         if self.goals:
             for goal in self.goals:
                 winner = goal.evaluate
@@ -93,6 +115,11 @@ class Board:
                     raise Board.Win(f'Player {winner}')
 
     def check_rules(self):
+        """
+        Goes through the list of rules and runs their `.rule()` methods.
+
+        :return: NoneType
+        """
         if self.rules:
             for rule in self.rules.ruleset:
                 rule()
@@ -103,35 +130,71 @@ class Board:
             self.inc_cards_played()
 
     class Win(Exception):
+        """
+        Thrown when the game is won.
+        """
+
         def __init__(self, *args):
             super(Board.Win, self).__init__(*args)
 
     def check_starts(self):
+        """
+        There's a special class of rules whose rule is only executed at the start of a turn. This runs their
+        `.start()` method. Those rules' `.rule()` methods just run `pass`.
+
+        :return: NoneType
+        """
         starts = [rule for rule in self.rules if isinstance(rule, Start)]
         for card in starts:
             card.start()
 
     @property
     def card_set(self):
+        """
+        Gives a list of all the cards in the game.
+
+        :return: list
+        """
         cards_in_hand = list(chain.from_iterable(self.hands))
         cards_in_keeps = list(chain.from_iterable(self.hands))
         cards_not_in_play = self.deck.values + self.trash.values
         return cards_in_hand + cards_in_keeps + cards_not_in_play + list(self.rules.cards) + list(self.goals.cards)
-            
+
     @property
     def curr_hand(self):
+        """
+        Gives the active player's hand.
+
+        :return: Hand
+        """
         return self.hands[self.active_player]
 
     @property
     def curr_keep(self):
+        """
+        Gives the active player's keep.
+
+        :return: Keep
+        """
         return self.keeps[self.active_player]
 
     @property
     def cards_seen(self):
+        """
+        Gives a list of all the cards that the active player can see.
+
+        :return: list
+        """
         return list(self.curr_hand) + list(self.trash) + list(self.rules) + list(self.goals)
 
     @property
     def options(self):
+        """
+        Gives a list of the actions that the active player can take.
+        Depends greatly on the current `action_type`
+
+        :return: list
+        """
         if self.action_type == 'normal':
             return list(self.curr_hand) + list(self.special_actions)
         elif self.action_type == 'handlimit':
@@ -169,21 +232,51 @@ class Board:
 
     @property
     def info(self):
+        """
+        Gives a dictionary telling the player what they need to know.
+
+        :draws: How many draws are allowed.
+        :plays: How many plays are allowed.
+        :player: The active player.
+        :keeps: A list of the Keeps in the game.
+        :goals: The `GoalSpace` for the game.
+        :rules: The `RuleSpace` for the game.
+        :discard: The discard pile.
+        :hand: The active player's hand.
+        :options: A list of the things that the active player is allowed to do.
+        :actiontype: The current type of action that the active player must perform.
+        :mystery: A description of the most recent MysteryPlay, if there was one.
+        :remaining: The number of plays the active player has remaining.
+        :drawn: The number of cards that hte active player has drawn.
+
+        :return: dict
+        """
         remaining = self.play_state - self.cards_played
         if remaining < 0:
             remaining = 0
         return {'draws': self.draw_state, 'plays': self.play_state, 'player': self.active_player,
                 'keeps': self.keeps, 'goals': self.goals, 'rules': self.rules,
-                'discard': self.trash, 'hand': self.hands[self.player_state], 'options': self.options,
+                'discard': self.trash, 'hand': self.hands[self.active_player], 'options': self.options,
                 'actiontype': self.action_type, 'mystery': self.mysteryplay,
                 'remaining': remaining, 'drawn': self.cards_drawn}
 
     @property
     def draw_state(self):
+        """
+        The total draw rule.
+
+        :return: int
+        """
         return sum(self.draw_bonuses) + 1 + (self.numeral * (not any([isinstance(rule, Draw) for rule in self.rules])))
 
     @property
     def active_player(self):
+        """
+        The player who currently must make a decision. When a limit is resolving, this is the player who must choose
+        what to discard. Otherwise it's the player whose turn it is.
+
+        :return: int
+        """
         if self.action_type.endswith('limit') and self.limit_state is not None:
             return self.limit_state
         else:
@@ -191,9 +284,20 @@ class Board:
 
     @property
     def play_state(self):
+        """
+        The total play rule.
+
+        :return: int
+        """
         return sum(self.play_bonuses) + 1 + (self.numeral * (not any([isinstance(rule, Play) for rule in self.rules])))
 
     def action(self, option):
+        """
+        The method which advances the game.
+
+        :param option: int The index of the option (from `board.options`) which the player would like to perform.
+        :return: NoneType
+        """
         hand = self.curr_hand
         keep = self.curr_keep
         self.check_rules()
@@ -372,6 +476,12 @@ class Board:
 
 class Card:
     def __init__(self, board, name):
+        """
+        A Card object. Represents a physical game card. Connected to a `Board`. Must have a name.
+
+        :param board: Board
+        :param name: str
+        """
         # A card has to be connected to a board object. This way each card must be unique to the
         # game it is in, and is always connected to the game that it's initialized for.
         self._board = board
@@ -388,22 +498,47 @@ class Card:
 
     @abstractmethod
     def do(self):
+        """
+        Does whatever the Card object does when it is played.
+
+        :return: NoneType
+        """
         pass  # Do some stuff to the board
 
     @abstractmethod
     def trash(self):
+        """
+        Does whatever the Card object needs to do to clean up after being removed from the game.
+
+        :return: NoneType
+        """
         pass  # do cleanup tasks
 
     def play(self):
+        """
+        Plays the card. Executes `Card.do()` then removes the card from the player's hand.
+
+        :return: NoneType
+        """
         self.do()
         self.remove_from_hand()
 
     def remove_from_hand(self):
+        """
+        Checks to see if the card is in anyone's hand. If so, then it removes it from the hand.
+
+        :return: NoneType
+        """
         for hand in self.board.hands:
             if self in hand:
                 hand.cards.discard(self)
 
     def trash_from_hand(self):
+        """
+        Checks to see if the card is in anyone's hand. If so then it moves the card to the discard.
+
+        :return: NoneType
+        """
         for hand in self.board.hands:
             if self in hand:
                 hand.discard(self)
@@ -421,27 +556,54 @@ class Card:
 class Keeper(Card):
 
     def do(self):
+        """
+        The card goes to the player's Keep.
+
+        :return: NoneType
+        """
         tar_keep = self.board.curr_keep
         tar_hand = self.board.curr_hand
         tar_keep.add(self)
         tar_hand.cards.discard(self)
 
     def trash(self):
+        """
+        The card moves itself from the keep that it's in and goes to the discard.
+
+        :return: NoneType
+        """
         tar_keep = [keep for keep in self.board.keeps if self in keep][0]
         tar_keep.discard(self)
         self.board.trash.append(self)
 
     def discard_from_keep(self):
+        """
+        The card removes itself from the keep that it's in.
+
+        :return: NoneType
+        """
         tarkeep = [keep for keep in self.board.keeps if self in keep][0]
         tarkeep.discard(self)
 
     def __init__(self, board, name):
+        """
+        A card of the Keeper Class. Subclass of `Card`. Plays to the player's `Keep`.
+
+        :param board: Board
+        :param name: str
+        """
         super(Keeper, self).__init__(board, name)
         self.tag = name
 
 
 class Deck(MutableSequence):
     def __init__(self, board):
+        """
+        A deck object. A mutable sequence of cards. Connected to a `Board`. Normal construction builds the
+        beginning-of-game deck.
+
+        :param board: Board
+        """
         super(Deck, self).__init__()
         self.values = []
         self._board = board
@@ -473,6 +635,12 @@ class Deck(MutableSequence):
 
     @classmethod
     def discard_creator(cls, board):
+        """
+        Alternate constructor, generates an empty `Deck`.
+
+        :param board: Board
+        :return: Deck
+        """
         disc = Deck(board)
         disc.values = []
         return disc
@@ -487,6 +655,11 @@ class Deck(MutableSequence):
         del self.values[key]
 
     def draw(self):
+        """
+        Takes the top `Card` off of the deck and returns it.
+
+        :return: Card
+        """
         if len(self) == 0:
             self.values = self.board.trash.values
             self.board.trash.values = []
@@ -518,6 +691,14 @@ class Hand(MutableSet):
         return iter(self.cards)
 
     def __init__(self, player_num, board, _draw=True):
+        """
+        A place where a player stores their `Card`s. Can be viewed, and is the list of cards that a player can play
+        during a normal action. Automatically draws 3 cards from `board.deck` when generated.
+
+        :param player_num: int
+        :param board: Board
+        :param _draw: bool Upon creation, can be set to False to prevent the Hand from automatically drawing 3 cards.
+        """
         super(Hand, self).__init__()
         self.player_num = player_num
         self.cards = set()
@@ -527,11 +708,25 @@ class Hand(MutableSet):
         self.cards_played = None
 
     def draw(self, amount):
+        """
+        Draws `amount` `Card`s from `board.deck`.
+
+        :param amount: int
+        :return: NoneType
+        """
         for _ in range(amount):
             self.add(self.board.deck.draw())
 
     @classmethod
     def temphand(cls, size, board):
+        """
+        Alternate constructor. Sets `_draw=False` so that the `Hand` which is returned is of size `size`. Draws `size`
+        cards and is connected to `board`.
+
+        :param size: int
+        :param board: Board
+        :return: Hand
+        """
         h = Hand(-1, board, _draw=False)
         h.draw(size)
         h.cards_played = 0
@@ -539,6 +734,12 @@ class Hand(MutableSet):
 
 
 class CardSpace(MutableSet):
+    """
+    The generic form of the RuleSpace, GoalSpace, and Keep.
+
+    May only hold `Card`s and acts like a MutableSet but with an attached Board.
+    """
+
     def add(self, x: Card) -> None:
         if isinstance(x, self.kind):
             self.cards.add(x)
@@ -575,6 +776,12 @@ class CardSpace(MutableSet):
 class Keep(CardSpace):
 
     def __init__(self, player_num, board):
+        """
+        The place where a player keeps their `Keepers`. Has an associated player number.
+
+        :param player_num: int
+        :param board: Board
+        """
         super(Keep, self).__init__(Keeper, board)
         self.player_num = player_num
         self.cards = set()
@@ -583,6 +790,11 @@ class Keep(CardSpace):
 class GoalSpace(CardSpace):
 
     def __init__(self, board):
+        """
+        The place where `Goal`s are played to. Is associated with a board.
+
+        :param board: Board
+        """
         super(GoalSpace, self).__init__(Goal, board)
         self.cards = []  # This technically isn't totally appropriate, but it prevents us from having to target the goal
         # in some way to trash it. When there isn't a double agenda, there's only ever one goal in here anyway, and it's
@@ -590,6 +802,14 @@ class GoalSpace(CardSpace):
         self.max_size = 1
 
     def add(self, x):
+        """
+        Runs some special code to ensure that the thing you're adding is a Goal card. Also makes sure that there is only
+        one (or two with Double Agenda) Goal in play. If Double Agenda is in play, then this initiates a special turn to
+        remove one of those Goals.
+
+        :param x: Card
+        :return: NoneType
+        """
         if 1 == len(self) and self.max_size == 1:
             self.cards[0].trash()
         elif len(self) > self.max_size > 1:
@@ -609,19 +829,30 @@ class GoalSpace(CardSpace):
 class Goal(Card):
 
     def do(self):
+        """
+        Plays the card to board.goals
+
+        :return: NoneType
+        """
         self.board.goals.add(self)
         tar_hand = self.board.curr_hand
         tar_hand.discard(self)
 
     def trash(self):
+        """
+        Puts the Card in the trash. Removes it from board.goals.
+
+        :return: NoneType
+        """
         self.board.goals.remove(self)
         self.board.trash.append(self)
 
     def __init__(self, board, tag):
         """
-        tag should be stored as an 'item' call from a dict.items().
+        A Goal Card. Has conditions which trigger a player winning the game.
+
         :param board: Board
-        :param tag: tuple
+        :param tag: tuple   tag should be stored as an 'item' call from a dict.items().
         """
         name, reqs = tag
         self.tag = tag
@@ -635,6 +866,12 @@ class Goal(Card):
 
     @property
     def evaluate(self):
+        """
+        Tells you whether or not the goal's conditions are satisfied.
+        Returns the player number who won (if someone won).
+
+        :return: int or NoneType
+        """
         for player_num in range(self.board.num_players):
             quals = []
             for req in self.reqs:  # This should pick a function based on the requirements.
@@ -647,12 +884,34 @@ class Goal(Card):
         return None
 
     def normal_check(self, req, player_num):
+        """
+        For most of the Goals, this is the way it checks. Just sees if the required card is in a player's keep.
+
+        :param req: str
+        :param player_num: int
+        :return: bool
+        """
         keep = self.board.keeps[player_num]
         return req in keep
 
     def exotic_check(self, req, player_num):
+        """
+        Checks the more complicated goals.
+
+        :param req: str
+        :param player_num: int
+        :return: bool
+        """
 
         def fluxx_most_check(target, qualifiers, stats):
+            """
+            Generically checks to see if a target has the most of something.
+
+            :param target: int
+            :param qualifiers: list
+            :param stats: list
+            :return: bool or int
+            """
             if sum(qualifiers) > 1:
                 max_keepers = max(stats)
                 winners = [s >= max_keepers for s in stats]
@@ -666,18 +925,46 @@ class Goal(Card):
                 return False
 
         def _anyfood(target: int, g: Goal):
+            """
+            Checks the second half of `Party Snacks`
+
+            :param target: int
+            :param g: Goal
+            :return: bool
+            """
             target = g.board.keeps[target]
             return sum([food in target for food in foods]) > self.numeral
 
         def _fivekeepers(target: int, g: Goal):
+            """
+            Checks for `5 Keepers`.
+
+            :param target: int
+            :param g: Goal
+            :return: bool
+            """
             stats = [len(k) for k in g.board.keeps]
             qualifiers = [s >= 5 + self.numeral for s in stats]
             return fluxx_most_check(target, qualifiers, stats)
 
         def _notv(target: int, g: Goal):
+            """
+            Checks for the second half of `Brain (No TV)`.
+
+            :param target: int
+            :param g: Goal
+            :return: bool
+            """
             return not any(['Television' in k for k in g.board.keeps]) and 'Brain' in g.board.keeps[target]
 
         def _tencards(target: int, g: Goal):
+            """
+            Checks for `10 Cards in Hand`.
+
+            :param target: int
+            :param g: Goal
+            :return: bool
+            """
             stats = [len(h) for h in g.board.hands]
             qualifiers = [s >= 10 + self.numeral for s in stats]
             return fluxx_most_check(target, qualifiers, stats)
@@ -689,21 +976,39 @@ class Goal(Card):
 
 class RuleSpace(CardSpace):
     def __init__(self, board):
+        """
+        A place which stores the rules.
+
+        :param board: Board
+        """
         super(RuleSpace, self).__init__(Rule, board)
 
     @property
     def ruleset(self):
+        """
+        Provides a list of the `.rule()` methods for the rules in the RuleSpace.
+        :return: list[function]
+        """
         ruleset = [card.rule for card in self.cards]
         return ruleset
 
 
 class Rule(Card):
     def do(self):
+        """
+        Does the `.enact()` step, then puts itself in the board.rules.
+
+        :return: NoneType
+        """
         self.enact()
         self.board.rules.add(self)
         self.remove_from_hand()
 
     def trash(self):
+        """
+        Does the `.repeal()` step, then removes itself from the board.rules, placing itself in the trash.
+        :return:
+        """
         self.board.rules.discard(self)
         self.board.trash.append(self)
         self.repeal()
@@ -723,6 +1028,13 @@ class Rule(Card):
 
 class Draw(Rule):
     def __init__(self, board, name, tag):
+        """
+        Specific subtype of rules which change how many cards you draw.
+
+        :param board: Board
+        :param name: str
+        :param tag: int
+        """
         draw_rule = tag
         self.tag = name
         super(Draw, self).__init__(board, name)
@@ -732,9 +1044,19 @@ class Draw(Rule):
 
     @property
     def draw_rule(self):
+        """
+        Calculates the Draw rule, given inflation.
+
+        :return: int
+        """
         return self._draw_rule - 1 + self.numeral
 
     def enact(self):
+        """
+        Setup step. Removes previously existing draw rules. Adds data to the board's list of draw effects.
+
+        :return: NoneType
+        """
         self.board.draw_bonuses.append(self.draw_rule)
         self.last = self.draw_rule
         deadrules = []
@@ -745,10 +1067,19 @@ class Draw(Rule):
             rule.trash()
 
     def repeal(self):
+        """
+        Cleanup step. Removes data from the board's list of draw effects.
+        :return:
+        """
         self.board.draw_bonuses.remove(self.last)
         self.last = None
 
     def rule(self):
+        """
+        Updates it's own entry in the board's list of draw effects.
+
+        :return: NoneType
+        """
         self.board.draw_bonuses.remove(self.last)
         self.board.draw_bonuses.append(self.draw_rule)
         self.last = self.draw_rule
@@ -756,6 +1087,13 @@ class Draw(Rule):
 
 class Play(Rule):
     def __init__(self, board, name, tag):
+        """
+        Rule of the subtype Play. Changes the amount of cards that you're allowed to play each turn.
+
+        :param board: Board
+        :param name: str
+        :param tag: int
+        """
         play_rule = tag
         self.tag = name
         super(Play, self).__init__(board, name)
@@ -765,6 +1103,11 @@ class Play(Rule):
 
     @property
     def play_rule(self):
+        """
+        Calculates the actual amount of cards the player may play.
+
+        :return: int
+        """
         play_rule = self._play_rule
         if play_rule > 0:
             actual = play_rule - 1 + self.numeral
@@ -775,6 +1118,11 @@ class Play(Rule):
         return actual
 
     def enact(self):
+        """
+        Setup step. Removes other Play rules. Adds data to the list of play effects.
+
+        :return: NoneType
+        """
         if self.play_rule > 0:
             self.board.play_bonuses.append(self.play_rule)
         temp = []
@@ -786,9 +1134,19 @@ class Play(Rule):
             rule.trash()
 
     def repeal(self):
+        """
+        Cleanup step. Removes data from the list of play effects.
+
+        :return: NoneType
+        """
         self.board.play_bonuses.remove(self.last_num)
 
     def rule(self):
+        """
+        Update step. Updates data in the list of play effects.
+
+        :return: NoneType
+        """
         if self.play_rule <= 0:
             tarhand = self.board.curr_hand
             if self.last_num:
@@ -805,6 +1163,13 @@ class Play(Rule):
 
 class Limit(Rule):
     def __init__(self, board, name, tag):
+        """
+        A subtype of rules which limits the amount of cards in a either a player's hand or their keep.
+
+        :param board: Board
+        :param name: str
+        :param tag: tuple[int, str] Describes the size of the limit and the thing it limits.
+        """
         super(Limit, self).__init__(board, name)
         number, tar_space = tag
         self.tag = tag
@@ -818,18 +1183,43 @@ class Limit(Rule):
 
     @property
     def number(self):
+        """
+        Checks the size of the limit considering Inflation.
+
+        :return: int
+        """
         return self._number + self.numeral
 
     def enact(self):
+        """
+        No special setup.
+        :return: NoneType
+        """
         pass
 
     def repeal(self):
+        """
+        No special teardown.
+        :return: NoneType
+        """
         pass
 
     def rule(self):
+        """
+        Checks each step to see if anyone is violating the limit rule. If so, then they are asked to discard down to
+        the size of the limit rule. Institutes a special action to do so.
+
+        :return: NoneType
+        """
         self.tar_list = self.board.keeps if self.tar_space is Keep else self.board.hands
 
         def checkr(space):
+            """
+            Quickly checks to see if a space is violating the rule.
+
+            :param space: Hand or Keep
+            :return: bool
+            """
             if len(space) > self.number and space.player_num != self.board.player_state:
                 return True
             elif len(space) <= self.number:
@@ -851,6 +1241,13 @@ class Limit(Rule):
 
 class Effect(Rule):
     def __init__(self, board, name, tag):
+        """
+        A subtype of rules which cause permanent changes to the game.
+
+        :param board: Board
+        :param name: str
+        :param tag: str
+        """
         super(Effect, self).__init__(board, name)
         self.tag = tag
         self._marker = 1
@@ -860,9 +1257,19 @@ class Effect(Rule):
 
     @property
     def marker(self):
+        """
+        Updates the numeral on the card.
+
+        :return: int
+        """
         return self._marker + self.numeral
 
     def enact(self):
+        """
+        Setup step. For inflation, updates every `.numeral` in the game. For double agenda, tells `board.goals` to
+        allow 2 goals at a time.
+        :return: NoneType
+        """
         if self.tag == 'e_inflation':
             for card in self.board.card_set:
                 if card.numeral is not None:
@@ -872,6 +1279,12 @@ class Effect(Rule):
             self.board.goals.max_size = 2
 
     def repeal(self):
+        """
+        Teardown step. For the bonuses, this means removing data from the bonus lists. For inflation, this means
+        switching every `.numeral` back to 0. For Double Agenda, this means setting the goal's max size back to 0.
+
+        :return: NoneType
+        """
         if self.tag in {'e_partybonus', 'e_poorbonus'}:
             self.board.draw_bonuses.remove(self.last)
             self.last = None
@@ -887,7 +1300,11 @@ class Effect(Rule):
             self.board.goals.max_size = 1
 
     def rule(self):
-
+        """
+        Does the thing that it says on the card. For the bonuses, this means checking to see if the parameter is
+        satisfied, and if so, enacting it. For the other ones, it doesn't do a whole lot.
+        :return: NoneType
+        """
         if self.tag == 'e_partybonus' and any([card.name == 'Party' for card in chain.from_iterable(self.board.keeps)]):
             self.board.draw_bonuses.append(self.marker)
             self.board.play_bonuses.append(self.marker)
@@ -897,28 +1314,36 @@ class Effect(Rule):
                 self.board.play_bonuses.remove(self.last)
             self.last = self.marker
 
-        if self.tag == 'e_poorbonus' and all([len(self.board.curr_keep) < len(keep)
-                                              for keep in self.board.keeps
-                                              if keep.player_num != self.board.active_player]):
+        elif self.tag == 'e_poorbonus' and all([len(self.board.curr_keep) < len(keep)
+                                                for keep in self.board.keeps
+                                                if keep.player_num != self.board.active_player]):
             self.board.draw_bonuses.append(self.marker)
             if self.last:
                 self.board.draw_bonuses.remove(self.last)
             self.last = self.marker
 
-        if self.tag == 'e_richbonus' and all([len(self.board.curr_keep) > len(keep)
-                                              for keep in self.board.keeps
-                                              if keep.player_num != self.board.active_player]):
+        elif self.tag == 'e_richbonus' and all([len(self.board.curr_keep) > len(keep)
+                                                for keep in self.board.keeps
+                                                if keep.player_num != self.board.active_player]):
             self.board.play_bonuses.append(self.marker)
             if self.last:
                 self.board.play_bonuses.remove(self.last)
             self.last = self.marker
-
+        else:
+            self.last = None
         if self.tag in {'e_inflation', 'e_doubleagenda'}:
             pass
 
 
 class Start(Rule):
     def __init__(self, board, name, tag):
+        """
+        The subclass of rules which do something at the start of each turn.
+
+        :param board: Board
+        :param name: str
+        :param tag: str
+        """
         super(Start, self).__init__(board, name)
         self.tag = tag
         if tag in {'s_nohandbonus'}:
@@ -927,6 +1352,11 @@ class Start(Rule):
 
     @property
     def size(self):
+        """
+        Calculates the numeral on the card.
+
+        :return: int
+        """
         if self.tag == 's_nohandbonus':
             return 3 + self.numeral
         else:
@@ -942,6 +1372,11 @@ class Start(Rule):
         pass
 
     def start(self):
+        """
+        The special action which a card does at the top of each turn.
+
+        :return: NoneType
+        """
         if self.tag == 's_nohandbonus':
             self.board.curr_hand.draw(self.size)
         if self.tag == 's_firstplayrandom' and self.board.play_state > 1:
@@ -951,6 +1386,13 @@ class Start(Rule):
 
 class FreeAction(Rule):
     def __init__(self, board, name, tag):
+        """
+        The Subset of Rules which allow players to take more actions.
+
+        :param board: Board
+        :param name: str
+        :param tag: str
+        """
         super(FreeAction, self).__init__(board, name)
         self.tag = tag
         if self.tag in {'fa_recycling', 'fa_getonwithit'}:
@@ -960,6 +1402,11 @@ class FreeAction(Rule):
 
     @property
     def size(self):
+        """
+        Calculates the numeral on the card.
+
+        :return: int
+        """
         if self.tag in {'fa_recycling', 'fa_getonwithit'}:
             return 3 + self.numeral
         else:
@@ -975,6 +1422,11 @@ class FreeAction(Rule):
         pass
 
     def effect(self):
+        """
+        This describes what happens when a Free Action is activated during a player's normal turn.
+
+        :return: NoneType
+        """
         hand = self.board.curr_hand
         keep = self.board.curr_keep
         self.used = True
@@ -1007,6 +1459,13 @@ class FreeAction(Rule):
 
 class Action(Card):
     def __init__(self, board, name, tag):
+        """
+        The subclass of cards which do some effect when they're played, but then go straight to the discard.
+
+        :param board: Board
+        :param name: str
+        :param tag: str
+        """
         super(Action, self).__init__(board, name)
         self.tag = tag
         self._size = None
@@ -1022,28 +1481,57 @@ class Action(Card):
 
     @property
     def size(self):
+        """
+        Calcuates the numeral on the card.
+
+        :return: int
+        """
         if self._size:
             return self._size + self.numeral
         else:
             raise TypeError(f'Card {self.name} does not have a size.')
 
     def trash(self):
+        """
+        Set up to make sure that an Action card is never in a permanent position on the board. Literally just throws
+        an exception.
+        :return: NoneType
+        """
         raise Board.IllegalMove(self.board, f"Tried to trash an Action Card, it shouldn't have ever "
-                                f"been permanent. Card Name: {self.name}")
+                                            f"been permanent. Card Name: {self.name}")
 
     def a_draw3play2(self):
+        """
+        Implements Draw 3, Play 2 of Them
+        :return: NoneType
+        """
         self.board.temphands.append(Hand.temphand(self.size, self.board))
         self.board.action_type = 'play2'
 
     def a_draw2use2(self):
+        """
+        Implements Draw 2 and Use 'Em.
+
+        :return: NoneType
+        """
         self.board.temphands.append(Hand.temphand(self.size, self.board))
         self.board.action_type = 'play2'
 
     def a_jackpot(self):
+        """
+        Implements Jackpot!
+
+        :return: NoneType
+        """
         hand = self.board.curr_hand
         hand.draw(3)
 
     def a_tax(self):
+        """
+        Implements Random Tax.
+
+        :return: NoneType
+        """
         hand = self.board.curr_hand
         for o_hand in (h for i, h in enumerate(self.board.hands) if i != self.board.player_state):
             pick = choice(list(o_hand))
@@ -1051,14 +1539,29 @@ class Action(Card):
             o_hand.cards.discard(pick)
 
     def a_everybody1(self):
+        """
+        Implements Everybody Gets 1
+
+        :return: NoneType
+        """
         self.board.temphands.append(Hand.temphand(self.size * self.board.num_players, self.board))
         self.board.action_type = 'everybody1'
-        
+
     def a_anotherturn(self):
+        """
+        Implements Take Another Turn
+
+        :return: NoneType
+        """
         self.used = True
         self.board.free_turn = True
-    
+
     def a_discardanddraw(self):
+        """
+        Implements Discard and Draw
+
+        :return: NoneType
+        """
         hand = self.board.curr_hand
         n_cards = len(hand) - 1
         temp = []
@@ -1069,6 +1572,11 @@ class Action(Card):
         hand.draw(n_cards)
 
     def a_sharethewealth(self):
+        """
+        Implements Share the Wealth.
+
+        :return: NoneType
+        """
         held_keepers = []
         for keep in self.board.keeps:
             for keeper in keep:
@@ -1084,36 +1592,81 @@ class Action(Card):
             self.board.keeps[tar_player].add(keeper)
 
     def a_zap(self):
+        """
+        Implements Zap A Keeper.
+
+        :return: NoneType
+        """
         self.board.action_type = 'zap'
 
     def a_rotatehands(self):
+        """
+        Implements Rotate Hands
+
+        :return: NoneType
+        """
         self.board.action_type = 'rotate'
 
     def a_dothatagain(self):
+        """
+        Implements Let's Do That Again!
+
+        :return: NoneType
+        """
         self.board.action_type = 'doitagain'
         if len(self.board.options) == 0:
             self.board.action_type = 'normal'
             raise Board.IllegalPlay(self.board, 'There are no Actions or New Rules to play.')
 
     def a_steal(self):
+        """
+        Implements Steal a Keeper
+
+        :return: NoneType
+        """
         self.board.action_type = 'steal'
         if len(self.board.options) == 0:
             self.board.action_type = 'normal'
             raise Board.IllegalPlay(self.board, 'There are no Keepers to steal.')
 
     def a_simplify(self):
+        """
+        Implements Let's Simplify
+
+        :return: NoneType
+        """
         self.board.action_type = 'simplify'
 
     def a_trash(self):
+        """
+        Implements Trash a Keeper.
+
+        :return: NoneType
+        """
         self.board.action_type = 'trash'
 
     def a_exchange(self):
+        """
+        Implements Exchange Keepers
+
+        :return: NoneType
+        """
         self.board.action_type = 'exchange1'
 
     def a_trade(self):
+        """
+        Implements Trade Hands
+
+        :return: NoneType
+        """
         self.board.action_type = 'trade'
 
     def a_rulesreset(self):
+        """
+        Implements Rules Reset.
+
+        :return: NoneType
+        """
         temp = []
         for card in self.board.rules:
             temp.append(card)
@@ -1121,9 +1674,19 @@ class Action(Card):
             card.trash()
 
     def a_usetake(self):
+        """
+        Implements Use What You Take.
+
+        :return: NoneType
+        """
         self.board.action_type = 'usetake'
 
     def a_nolimits(self):
+        """
+        Implements No Limits.
+
+        :return: NoneType
+        """
         temp = []
         for card in [rule for rule in self.board.rules if isinstance(rule, Limit)]:
             temp.append(card)
@@ -1131,6 +1694,11 @@ class Action(Card):
             card.trash()
 
     def a_emptytrash(self):
+        """
+        Implements Empty the Trash
+
+        :return: NoneType
+        """
         new_trash = Deck.discard_creator(self.board)
         new_trash.append(self)
         beep = []
@@ -1142,5 +1710,10 @@ class Action(Card):
         shuffle(self.board.deck)
 
     def do(self):
+        """
+        Reads the card and runs the corresponding function defined above.
+
+        :return: NoneType
+        """
         type(self).__dict__[self.tag](self)
         self.board.trash.append(self)

@@ -1,6 +1,8 @@
 """
 Author: Coen D. Needell
+
 Copyright: Looney Labs
+
 Fluxx is a registered trademark of Looney Labs -- College Park, MD 20741-0763
 
 This file constitutes the 'Engine' of the game. In strict terms, the engine is actually split between the object.Board
