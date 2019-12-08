@@ -68,16 +68,19 @@ following.
 
 Objects
 =======
+
 .. automodule:: objects
    :members:
 
 Engine
 =======
+
 .. automodule:: engine
    :members:
 
 Assets
 ======
+
 .. automodule:: assets
    :members:
 
