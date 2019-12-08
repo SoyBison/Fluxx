@@ -51,6 +51,7 @@ class Board:
             # this and allow people to take a free action after their last play.
             self.cards_played = 0
             self.cards_drawn = self.draw_state
+            self.check_starts()
 
     class IllegalMove(Exception):
         def __init__(self, board, *args):
@@ -84,7 +85,7 @@ class Board:
         if self.draw_state > self.cards_drawn > 0:
             self.curr_hand.draw(self.draw_state - self.cards_drawn)
             self.cards_drawn += (self.draw_state - self.cards_drawn)
-        if self.cards_played == self.play_state:
+        if self.cards_played >= self.play_state:
             self.inc_cards_played()
 
     class Win(Exception):
@@ -110,6 +111,10 @@ class Board:
     @property
     def curr_keep(self):
         return self.keeps[self.active_player]
+
+    @property
+    def cards_seen(self):
+        return list(self.curr_hand) + list(self.trash) + list(self.rules) + list(self.goals)
 
     @property
     def options(self):
@@ -172,7 +177,7 @@ class Board:
 
     @property
     def play_state(self):
-        return sum(self.play_bonuses) + 1 + self.numeral
+        return sum(self.play_bonuses) + 1 + (self.numeral * (not any([isinstance(rule, Play) for rule in self.rules])))
 
     def action(self, option):
         hand = self.curr_hand
@@ -337,6 +342,7 @@ class Board:
             for card in temp[1]:
                 self.curr_hand.add(card)
                 tarhand.discard(card)
+            self.action_type = 'normal'
 
         elif self.action_type == 'usetake':
             pick = self.options[option]
@@ -344,6 +350,7 @@ class Board:
             tarhand = self.hands[pick]
             card = choice(list(tarhand))
             card.play()
+            self.action_type = 'normal'
 
         self.check_goal()
         self.check_rules()
@@ -646,7 +653,7 @@ class Goal(Card):
 
         def _anyfood(target: int, g: Goal):
             target = g.board.keeps[target]
-            return any([food in target for food in foods])
+            return sum([food in target for food in foods]) > self.numeral
 
         def _fivekeepers(target: int, g: Goal):
             stats = [len(k) for k in g.board.keeps]
@@ -751,13 +758,13 @@ class Play(Rule):
             actual = play_rule - 1
         else:
             actual = play_rule - self.numeral - 1
-        self.board.cards_played = 0
         return actual
 
     def enact(self):
         if self.play_rule > 0:
             self.board.play_bonuses.append(self.play_rule)
         temp = []
+        self.last_num = self.play_rule
         for rule in self.board.rules:
             if isinstance(rule, Play):
                 temp.append(rule)
@@ -765,10 +772,7 @@ class Play(Rule):
             rule.trash()
 
     def repeal(self):
-        if self.play_rule > 0:
-            self.board.play_bonuses.remove(self.play_rule)
-        else:
-            self.board.play_bonuses.remove(self.last_num)
+        self.board.play_bonuses.remove(self.last_num)
 
     def rule(self):
         if self.play_rule <= 0:
@@ -777,6 +781,12 @@ class Play(Rule):
                 self.board.play_bonuses.remove(self.last_num)
             self.board.play_bonuses.append(len(tarhand) + self.play_rule)
             self.last_num = len(tarhand) + self.play_rule
+            if self.play_rule < 0 and len(self.board.curr_hand) == 1:
+                self.board.curr_hand.draw(1)
+        else:
+            self.board.play_bonuses.remove(self.last_num)
+            self.board.play_bonuses.append(self.play_rule)
+            self.last_num = self.play_rule
 
 
 class Limit(Rule):
@@ -805,14 +815,13 @@ class Limit(Rule):
     def rule(self):
         self.tar_list = self.board.keeps if self.tar_space is Keep else self.board.hands
 
-        def checkr(space: CardSpace):
-            if len(space) > self.number:
+        def checkr(space):
+            if len(space) > self.number and space.player_num != self.board.player_state:
                 return True
             elif len(space) <= self.number:
                 return False
 
-        limit_fails = [sp.player_num for sp in filter(checkr, self.tar_list)
-                       if sp.player_num != self.board.player_state]
+        limit_fails = [sp.player_num for sp in filter(checkr, self.tar_list)]
 
         if limit_fails:
             player = limit_fails[0]
@@ -823,6 +832,7 @@ class Limit(Rule):
             self.board.limit_state = player
         else:
             self.board.limit_state = None
+            self.board.action_type = 'normal'
 
 
 class Effect(Rule):
@@ -1090,21 +1100,30 @@ class Action(Card):
         self.board.action_type = 'trade'
 
     def a_rulesreset(self):
+        temp = []
         for card in self.board.rules:
+            temp.append(card)
+        for card in temp:
             card.trash()
 
     def a_usetake(self):
         self.board.action_type = 'usetake'
 
     def a_nolimits(self):
+        temp = []
         for card in [rule for rule in self.board.rules if isinstance(rule, Limit)]:
+            temp.append(card)
+        for card in temp:
             card.trash()
 
     def a_emptytrash(self):
         new_trash = Deck.discard_creator(self.board)
         new_trash.append(self)
+        beep = []
         for card in self.board.trash:
             self.board.deck.append(card)
+            beep.append(card)
+        for card in beep:
             self.board.trash.remove(card)
         shuffle(self.board.deck)
 
