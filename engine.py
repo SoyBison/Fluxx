@@ -1,3 +1,17 @@
+"""
+Author: Coen D. Needell
+Copyright: Looney Labs
+Fluxx is a registered trademark of Looney Labs -- College Park, MD 20741-0763
+
+This file constitutes the 'Engine' of the game. In strict terms, the engine is actually split between the object.Board
+and here, but I've called this file engine.py for simplicity. This file contains the interface for the game. After
+trying a number of interfaces for python scripts, I chose to implement our engine with the standard python
+input-response loop. The point-of-interface between the engine and the game objects is intended to be minimal. This is
+because I intend the game to be machine-playable in the case of future development.
+"""
+
+__docformat__ = 'reStructuredText'
+
 import sys
 
 from objects import *
@@ -6,6 +20,9 @@ board = None
 
 
 def start_screen():
+    """
+    Shows the start screen, and sets up the game.
+    """
     global board
 
     print('Starting Game...')
@@ -14,12 +31,15 @@ def start_screen():
     playnum = input('How Many Players? ')
     board = Board(int(playnum))
     if isinstance(board, Board):
-        play_game(board)
+        play_game()
     else:
         return False
 
 
 def print_info():
+    """
+    Gives the active player information about the game state.
+    """
     global board
     info = board.info
     options = list(enumerate(info['options']))
@@ -43,6 +63,9 @@ def print_info():
 
 
 def card_text_info(card_name):
+    """
+    Returns the card text of the card specified by card_name.
+    """
     if card_name in card_text['Action']:
         card_type = 'Action'
     elif card_name in card_text['Goal']:
@@ -55,6 +78,9 @@ def card_text_info(card_name):
 
 
 def get_card_text():
+    """
+    Runs the 'read card text' environment.
+    """
     global board
     info = board.cards_seen
     print("Enter the target card as a number, or type in the card's name as it appears in game. "
@@ -89,6 +115,9 @@ def get_card_text():
 
 
 def interact(entry):
+    """
+    This is the function that interacts with the board.action() method from objects.py.
+    """
     global board
     try:
         if len(entry) == 1:
@@ -105,7 +134,10 @@ def interact(entry):
             print("That isn't an available option.", e)
 
 
-def play_game(_):
+def play_game():
+    """
+    The core environment for the game.
+    """
     global board
     print_info()
     print('You may enter "d" to view the discard, "h" to view your hand, \n'

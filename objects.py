@@ -1,15 +1,29 @@
+"""
+Author: Coen D. Needell
+Copyright: Looney Labs
+
+This file contains all of the 'meat and potatoes' of the game. It contains all the objects that the game engine
+interacts with and does all of the computational work of the game. It's a card game though, so that's not too hard.
+The main purpose is for a Board object to act as a finite state machine which can be controlled using board.action().
+"""
+
 from abc import abstractmethod
 from collections.abc import MutableSequence, MutableSet
-# noinspection PyProtectedMember,PyProtectedMember
-from random import randint, shuffle, choice
 from itertools import cycle, chain
 from math import ceil
+from random import shuffle, choice
 
 from assets import *
 
 
 class Board:
+    """
+    The Board object houses all of the information about the current game. Each card in the game has to be connected
+    to a Board object.
+    :type num_players: int The number of players playing the game.
+    """
     def __init__(self, num_players):
+
         self.deck = Deck(self)
         self.hands = [Hand(player_num, self) for player_num in range(num_players)]
         self.keeps = [Keep(player_num, self) for player_num in range(num_players)]
