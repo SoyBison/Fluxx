@@ -6,7 +6,6 @@ refers to a card which has special behavior within its class. This behavior is r
 The foodlist is stored here, too.
 
 """
-from objects import Keep, Hand
 
 keepers = {'Sleep', 'Money', 'Time', 'Music', 'Sun', 'Toaster', 'Eye', 'Brain', 'Moon',
            'Love', 'Peace', 'Rocket', 'Television', 'Milk', 'Cookies', 'Chocolate', 'Dreams', 'Party', 'Bread'}
@@ -52,8 +51,8 @@ goals = {
 rules = {
     'Draw': {'Draw 2': 2, 'Draw 3': 3, 'Draw 4': 4, 'Draw 5': 5},
     'Play': {'Play 2': 2, 'Play 3': 3, 'Play 4': 4, 'Play All But 1': -1, 'Play All': 0},
-    'Limit': {'Hand Limit 2': (2, Hand), 'Hand Limit 1': (1, Hand), 'Hand Limit 0': (0, Hand),
-              'Keeper Limit 4': (4, Keep), 'Keeper Limit 3': (3, Keep), 'Keeper Limit 2': (2, Keep)},
+    'Limit': {'Hand Limit 2': (2, 'Hand'), 'Hand Limit 1': (1, 'Hand'), 'Hand Limit 0': (0, 'Hand'),
+              'Keeper Limit 4': (4, 'Keep'), 'Keeper Limit 3': (3, 'Keep'), 'Keeper Limit 2': (2, 'Keep')},
     'Effect': {'Party Bonus': 'e_partybonus', 'Rich Bonus': 'e_richbonus', 'Poor Bonus': 'e_poorbonus',
                'Inflation': 'e_inflation', 'Double Agenda': 'e_doubleagenda'},
     'Start': {'First Play Random': 's_firstplayrandom', 'No-Hand Bonus': 's_nohandbonus'},
@@ -71,3 +70,6 @@ actions = {'Share the Wealth': 'a_sharethewealth', 'Discard and Draw': 'a_discar
            'Empty the Trash': 'a_emptytrash'}
 
 optionalactions = {'Rock-Paper-Scissors Showdown': 'a_rps', "Today's Special!": 'a_todaysspecial'}
+
+with open('banner.txt', 'r') as file:
+    logo = file.read()
