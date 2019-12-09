@@ -55,3 +55,7 @@ following.
    will throw a `Board.Win` exception which contains the number of the
    player who won.
    
+### Documentation:
+
+Full Documentation of the engine and objects can be found at 
+https://fluxx.readthedocs.io/en/latest/index.htmlhttps://fluxx.readthedocs.io/en/latest/index.html
