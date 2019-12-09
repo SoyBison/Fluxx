@@ -72,7 +72,7 @@ actions = {'Share the Wealth': 'a_sharethewealth', 'Discard and Draw': 'a_discar
 
 optionalactions = {'Rock-Paper-Scissors Showdown': 'a_rps', "Today's Special!": 'a_todaysspecial'}
 
-with open(os.path.dirname(os.path.abspath(__file__)) + '\\banner.txt', 'r') as file:
+with open(os.path.dirname(os.path.abspath(__file__)) + '/banner.txt', 'r') as file:
     logo = file.read()
 
 card_text = {'Goal': {'Hippyism': 'Peace + Love',
