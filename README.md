@@ -59,3 +59,7 @@ following.
 
 Full Documentation of the engine and objects can be found at 
 https://fluxx.readthedocs.io/en/latest/
+
+#### Dedication:
+
+This project is dedicated to Daniel Pollak

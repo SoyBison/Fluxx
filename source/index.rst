@@ -89,3 +89,9 @@ Indices and tables
 
 * :ref:`genindex`
 * :ref:`search`
+
+
+Dedication:
+############
+
+This project is dedicated to Daniel Pollak
